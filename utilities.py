@@ -5,11 +5,9 @@ Created on Wed Mar  4 19:26:07 2020
 @author: Utilisateur
 """
 
-from time import time
 from scipy import linalg
 from copy import deepcopy
 from itertools import permutations
-from sklearn.metrics import precision_score
 from sklearn.preprocessing import OneHotEncoder
 
 import itertools
@@ -18,8 +16,9 @@ import matplotlib as mpl
 import autograd.numpy as np
 import matplotlib.pyplot as plt
 
-from glmlvm import glmlvm
-from init_params import random_init, dim_reduce_init
+from autograd.numpy.linalg import pinv
+from autograd.numpy import newaxis as n_axis
+from autograd.numpy import transpose as t
 
 def sample_MC_points(zM, p_z_ys, nb_points):
     ''' Resample nb_points from zM with the highest p_z_ys probability
@@ -222,80 +221,115 @@ def compute_nj(y, var_distrib):
     return nj, nj_bin, nj_ord
 
 
+def cluster_purity(cm):
+    ''' Compute the cluster purity index mentioned in Chen and He (2016)'''
+    return np.sum(np.amax(cm, axis=0)) / np.sum(cm) 
+
+
+##########################################################################################################
+#################################### DGMM Utils ##########################################################
+##########################################################################################################
+
+
 def repeat_tile(x, reps, tiles):
-    ''' repeat then tile a quantity to mimic the former code logic'''
+    ''' Repeat then tile a quantity to mimic the former code logic'''
     x_rep = np.repeat(x, reps, axis = 0)
     x_tile_rep = np.tile(x_rep, (tiles, 1, 1))
     return x_tile_rep
         
 
-def compute_path_params(H_list, psi_list, psi_list_inv, mu_list, w_list, ps_y_list):
+def compute_path_params(eta, H, psi):
     ''' Compute the gaussian parameters for each path
-    H_list (list of nb_layers elements of shape (K_l x r_l-1, r_l)): Lambda parameters for each layer
-    psi_list (list of nb_layers elements of shape (K_l x r_l-1, r_l-1)): Psi parameters for each layer
-    psi_list_inv (list of nb_layers elements of shape (K_l x r_l-1, r_l-1)): Psi^{-1} parameters for each layer
-    mu_list (list of nb_layers elements of shape (K_l x r_l-1)): mu parameters for each layer
-    w_list (list of nb_layers elements of shape (K_l): pi parameters for each layer
-    ps_y_list (list of nb_layers elements of shape (numobs x K_l): p(s_l | y) parameters for each layer
+    H (list of nb_layers elements of shape (K_l x r_l-1, r_l)): Lambda parameters for each layer
+    psi (list of nb_layers elements of shape (K_l x r_l-1, r_l-1)): Psi parameters for each layer
+    eta (list of nb_layers elements of shape (K_l x r_l-1)): mu parameters for each layer
     ------------------------------------------------------------------------------------------------
-    returns (tuple of len 5): The updated parameters
+    returns (tuple of len 2): The updated parameters mu_s and sigma for all s in Omega
     '''
     
     #=====================================================================
     # Retrieving model parameters
     #=====================================================================
-
-    layers = len(H_list)
-    k = [len(h) for h in H_list]
+    
+    L = len(H)
+    k = [len(h) for h in H]
     k_aug = k + [1] # Integrating the number of components of the last layer i.e 1
     
-    p = H_list[0].shape[1]
-    r = [h.shape[2] for h in H_list]
-    r = [p] + r # r augmented
-    numobs = len(ps_y_list[0])
-
+    r1 = H[0].shape[1]
+    r2_L = [h.shape[2] for h in H] # r[2:L]
+    r = [r1] + r2_L # r augmented
+    
     #=====================================================================
     # Initiating the parameters for all layers
     #=====================================================================
     
-    mu_tilde = [0 for i in range(layers)]
-    sigma_tilde = [0 for i in range(layers)]
-    sigma_inv_tilde = [0 for i in range(layers)]
-    chsi = [0 for i in range(layers)]
-    pi_s_tilde_n = [0 for i in range(layers)]  # The probability of each path for each observation
-
+    mu_s = [0 for i in range(L + 1)]
+    sigma_s = [0 for i in range(L + 1)]
+    
     # Initialization with the parameters of the last layer
-    mu_tilde[-1] = np.zeros((k[-1], r[-1], 1)) # Inverser k et r plus tard
-    sigma_tilde[-1] = np.repeat(np.eye(r[-1])[np.newaxis], k[-1], axis = 0)
-    sigma_inv_tilde[-1] = inv(sigma_tilde[-1])
-    chsi[-1] = inv(np.tile(np.eye(r[-1])[np.newaxis], (k[-1], 1, 1)) + np.transpose(H_list[-1], (0,2,1)) @ psi_list_inv[-1] @ H_list[-1]) 
-    pi_s_tilde_n[-1] = np.ones((numobs,1)) # Initialise to 1 because there is only one component on layer h
+    mu_s[-1] = np.zeros((1, r[-1], 1)) # Inverser k et r plus tard
+    sigma_s[-1] = np.eye(r[-1])[n_axis]
     
     #==================================================================================
     # Compute Gaussian parameters from top to bottom for each path
     #==================================================================================
-    
-    for l in reversed(range(0, layers - 1)):
-       # Compute sigma_s^(l+1)
-       H_tile = repeat_tile(H_list[l + 1],  np.prod(k_aug[l + 2:]), k[l]) 
-       
-       sigma_tilde[l] = H_tile @ np.tile(sigma_tilde[l + 1], (k[l], 1, 1)) @ np.transpose(H_tile, (0, 2, 1)) \
-           + np.tile(psi_list[l + 1], (np.prod(k[l:])//k[l + 1], 1, 1))
-       sigma_inv_tilde[l] = inv(sigma_tilde[l])
-       
-       # Compute chsi
-       Ht_psi_H_repeat = np.repeat(np.transpose(H_list[l], (0,2,1)) @ psi_list_inv[l] @ H_list[l], np.prod(k[l + 1:]), axis = 0)
-       chsi[l] = inv(sigma_inv_tilde[l] + Ht_psi_H_repeat)
-       
-       if (chsi[l]>10E20).any():
-            print(psi_list_inv[l])           
-            raise RuntimeError("chsi explosion")
-            
-       # Compute mu_s^(l+1)
-       mu_tilde[l] = np.tile(np.repeat(np.expand_dims(mu_list[l + 1].T, -1), np.prod(k_aug[l + 2:]), axis = 0), (k[l], 1, 1)) \
-           + H_tile @ np.tile(mu_tilde[l + 1], (k[l], 1, 1))
-           
-       # Compute pi_s_tilde for all observation n (Equation ...): The probability of paths begining at layer l
-       pi_s_tilde_n[l] = np.repeat(ps_y_list[l + 1], np.prod(k[l + 2: ]), axis = -1) * np.tile(pi_s_tilde_n[l + 1], (1, k[l + 1]))
 
-    return mu_tilde, sigma_tilde, sigma_inv_tilde, pi_s_tilde_n, chsi
+    for l in reversed(range(0, L)):
+        H_repeat = np.repeat(H[l], np.prod(k_aug[l + 1: ]), axis = 0)
+        eta_repeat = np.repeat(eta[l], np.prod(k_aug[l + 1: ]), axis = 0)
+        psi_repeat = np.repeat(psi[l], np.prod(k_aug[l + 1: ]), axis = 0)
+        
+        mu_s[l] = eta_repeat + H_repeat @ np.tile(mu_s[l + 1], (k[l], 1, 1))
+        
+        sigma_s[l] = H_repeat @ np.tile(sigma_s[l + 1], (k[l], 1, 1)) @ t(H_repeat, (0, 2, 1)) \
+            + psi_repeat
+        
+    return mu_s, sigma_s
+
+
+def compute_chsi(H, psi, mu_s, sigma_s):
+    ''' Compute chsi as defined in equation (8) of the DGMM paper '''
+    L = len(H)
+    k = [len(h) for h in H]
+    
+    #=====================================================================
+    # Initiating the parameters for all layers
+    #=====================================================================
+    
+    # Initialization with the parameters of the last layer    
+    chsi = [0 for i in range(L)]
+    chsi[-1] = pinv(pinv(sigma_s[-1]) + t(H[-1], (0, 2, 1)) @ pinv(psi[-1]) @ H[-1]) 
+
+    #==================================================================================
+    # Compute chsi from top to bottom 
+    #==================================================================================
+        
+    for l in range(L - 1):
+        Ht_psi_H = t(H[l], (0, 2, 1)) @ pinv(psi[l]) @ H[l]
+        Ht_psi_H = np.repeat(Ht_psi_H, np.prod(k[l + 1:]), axis = 0)
+        
+        sigma_next_l = np.tile(sigma_s[l + 1], (k[l], 1, 1))
+        chsi[l] = pinv(pinv(sigma_next_l) + Ht_psi_H)
+            
+    return chsi
+
+def compute_rho(eta, H, psi, mu_s, sigma_s, z_c, chsi):
+    ''' Compute rho as defined in equation (8) of the DGMM paper '''
+    
+    L = len(H)    
+    rho = [0 for i in range(L)]
+    k = [len(h) for h in H]
+    k_aug = k + [1] 
+
+    for l in range(0, L):
+        sigma_next_l = np.tile(sigma_s[l + 1], (k[l], 1, 1))
+        mu_next_l = np.tile(mu_s[l + 1], (k[l], 1, 1))
+
+        HxPsi_inv = t(H[l], (0, 2, 1)) @ pinv(psi[l])
+        HxPsi_inv = np.repeat(HxPsi_inv, np.prod(k_aug[l + 1: ]), axis = 0)
+
+        rho[l] = chsi[l][n_axis] @ (HxPsi_inv[n_axis] @ z_c[l][..., n_axis] \
+                                    + (pinv(sigma_next_l) @ mu_next_l)[n_axis])
+                
+    return rho
+    

@@ -2,15 +2,16 @@
 """
 Created on Mon Feb 10 16:55:44 2020
 
-@author: Utilisateur
+@author: RobF
 """
 
 import os
 os.chdir('C:/Users/rfuchs/Documents/GitHub/GLMLVM_MFA')
 
 from sklearn.linear_model import LogisticRegression
-from sklearn.cluster import KMeans
 from factor_analyzer import FactorAnalyzer
+from sklearn.mixture import GaussianMixture
+from utilities import compute_path_params
 
 import prince
 import pandas as pd
@@ -23,122 +24,6 @@ from autograd.numpy.random import uniform
 from autograd.numpy import newaxis as n_axis
 from autograd.numpy import transpose as t
 from autograd.numpy.linalg import cholesky, pinv
-
-from glmlvm import glmlvm
-
-
-####################################################################################
-########################## Random initialisations ##################################
-####################################################################################
-
-def random_init(r, nj_bin, nj_ord, k, init_seed):
-    ''' Generate random initialisations for the parameters
-    
-    r (int): The dimension of latent variables
-    nj_bin (nb_bin 1darray): For binary/count data: The maximum values that the variable can take. 
-    nj_ord (nb_ord 1darray): For ordinal data: the number of different existing categories for each variable
-    k (int): The number of components of the latent Gaussian mixture
-    init_seed (int): The random state seed to set (Only for numpy generated data for the moment)
-    --------------------------------------------------------------------------------------------
-    returns (dict): The initialisation parameters   
-    '''
-    
-    # Seed for init
-    np.random.seed = init_seed
-    init = {}
-    
-    
-    # Gaussian mixture params
-    init['w'] = np.full(k, 1/k) 
-    
-    mu_init = np.repeat(np.linspace(-1.0, 1.0, num = k)[..., n_axis], axis = 1, repeats =r)
-    init['mu'] = (uniform(low = -5, high = 5, size = (1,1)) * mu_init)
-    init['mu'] = init['mu'][..., np.newaxis]
-  
-    init['sigma'] = np.zeros(shape = (k, r, r))
-    for i in range(k):
-        init['sigma'][i] = 0.050 * np.eye(r)
-        
-    # Enforcing identifiability constraints
-    muTmu = init['mu'] @ t(init['mu'], (0,2,1))  
-     
-    E_zzT = (init['w'][..., n_axis, n_axis] * (init['sigma'] + muTmu)).sum(0, keepdims = True)
-    Ezz_T = (init['w'][...,n_axis, n_axis] * init['mu']).sum(0, keepdims = True)
-    
-    var_z = E_zzT - Ezz_T @ t(Ezz_T, (0,2,1)) # Koenig-Huyghens Formula for Variance Computation
-    sigma_z = cholesky(var_z)
-     
-    init['sigma'] = pinv(sigma_z) @ init['sigma'] @ t(pinv(sigma_z), (0, 2, 1))
-    init['mu'] = pinv(sigma_z) @ init['mu']
-    init['mu']  = init['mu']  - Ezz_T
-
-    # GLLVM params    
-    p1 = len(nj_bin)
-    p2 = len(nj_ord)
-    
-    if p1 > 0:
-        init['lambda_bin'] = uniform(low = -3, high = 3, size = (p1, r + 1))
-        init['lambda_bin'][:,1:] = init['lambda_bin'][:,1:] @ sigma_z[0] 
-        
-        if (r > 1): 
-            init['lambda_bin'] = np.tril(init['lambda_bin'], k = 1)
-
-    else:
-        init['lambda_bin'] = np.array([]) #np.full((p1, r + 1), np.nan)
-  
-    if p2 > 0:
-
-        lambda_ord = []
-        for j in range(p2):
-            lambda0_ord = np.sort(uniform(low = -2, high = 2, size = (nj_ord[j] - 1)))
-            Lambda_ord = uniform(low = -3, high = 3, size = r)
-            lambda_ord.append(np.hstack([lambda0_ord, Lambda_ord]))
-              
-        init['lambda_ord'] = lambda_ord
-        
-    else:
-        init['lambda_ord'] = np.array([])#np.full((p2, 1), np.nan)
-    
-    return(init)
-
-
-def init_cv(y, var_distrib, r, nj_bin, nj_ord, k, seed):
-    ''' Test 20 different inits for a few iterations and returns the best one
-    
-    y (numobs x p ndarray): The observations containing categorical variables
-    var_distrib (p 1darray): An array containing the types of the variables in y 
-    r (int): The dimension of latent variables
-    nj_bin (nb_bin 1darray): For binary/count data: The maximum values that the variable can take. 
-    nj_ord (nb_ord 1darray): For ordinal data: the number of different existing categories for each variable
-    k (int): The number of components of the latent Gaussian mixture
-    seed (int): The random state seed to set (Only for numpy generated data for the moment)
-    --------------------------------------------------------------------------------------------
-    returns (dict): The initialisation parameters that gave the best likelihood
-    '''
-      
-    nb_init_tested = 10
-    M = 4 * r
-    best_lik = -1000000
-    best_init = {}
-    nb_it = 2
-    maxstep = 100
-    eps = 1E-5
-    nj = np.concatenate([nj_bin, nj_ord])
-
-    for i in range(nb_init_tested):
-        init = random_init(r, nj_bin, nj_ord, k, None)
-        try:
-            out = glmlvm(y, r, k, nb_it, init, eps, maxstep, var_distrib, nj, M, seed)
-        except:
-            continue
-
-        lik = out['likelihood'][-1]
-    
-        if (best_lik < lik):
-            best_lik = lik
-            best_init = init
-    
-    return(best_init)
 
 
 ####################################################################################
@@ -169,41 +54,45 @@ def bin_to_bern(Nj, yj_binom, zM_binom):
 
 
 
-def get_MFA_params(z1, k1, r):
-    ''' Adjust a MFA over z1'''
+def get_MFA_params(zl, kl, rl_nextl):
+    ''' Determine clusters with a GMM and then adjust a Factor Model over each cluster
+    zl (ndarray): The lth layer latent variable 
+    kl (int): The number of components of the lth layer
+    rl_nextl (1darray): The dimension of the lth layer and (l+1)th layer
+    -----------------------------------------------------
+    returns (dict): Dict with the parameters of the MFA approximated by GMM + FA. 
+    '''
     #======================================================
     # Fit a GMM in the continuous space
     #======================================================
-    numobs = z1.shape[0]
-    km = KMeans(n_clusters = k1)
-    km.fit(z1)
-    s = km.predict(z1)
+    numobs = zl.shape[0]
+
+    gmm = GaussianMixture(n_components = kl)
+    s = gmm.fit_predict(zl)
     
-    psi = np.full((k1, r[0], r[0]), 0).astype(float)
-    psi_inv = np.full((k1, r[0], r[0]), 0).astype(float)
-    H = np.full((k1, r[0], r[1]), 0).astype(float)
-    eta = np.full((k1, r[0]), 0).astype(float)
-    z2 = np.full((numobs, r[1]), np.nan).astype(float)
+    psi = np.full((kl, rl_nextl[0], rl_nextl[0]), 0).astype(float)
+    psi_inv = np.full((kl, rl_nextl[0], rl_nextl[0]), 0).astype(float)
+    H = np.full((kl, rl_nextl[0], rl_nextl[1]), 0).astype(float)
+    eta = np.full((kl, rl_nextl[0]), 0).astype(float)
+    z_nextl = np.full((numobs, rl_nextl[1]), np.nan).astype(float)
   
     #========================================================
     # And then a MFA on each of those group
     #========================================================
     
-    for j in range(k1):
+    for j in range(kl):
         indices = (s == j)
-        fa = FactorAnalyzer(rotation = None, method = 'ml', n_factors = r[1])
-        fa.fit(z1[indices])
+        fa = FactorAnalyzer(rotation = None, method = 'ml', n_factors = rl_nextl[1])
+        fa.fit(zl[indices])
 
         psi[j] = np.diag(fa.get_uniquenesses())
         H[j] = fa.loadings_
         psi_inv[j] = np.diag(1/fa.get_uniquenesses())
-        z2[indices] = fa.transform(z1[indices])
+        z_nextl[indices] = fa.transform(zl[indices])
   
-        eta[j] = np.mean(z1[indices], axis = 0)
-
-    w = np.unique(s, return_counts = True)[1] / numobs
+        eta[j] = np.mean(zl[indices], axis = 0)
   
-    params = {'w': w, 'H': H, 'psi': psi, 'z2': z2, 'eta': eta, 'preds': s}
+    params = {'H': H, 'psi': psi, 'z_nextl': z_nextl, 'eta': eta, 'classes': s}
     return params
 
 
@@ -212,7 +101,7 @@ def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
     the init coefficients in that space
     
     y (numobs x p ndarray): The observations containing categorical variables
-    k (int): The number of components of the latent Gaussian mixture
+    k (1d array): The number of components of the latent Gaussian mixture layers
     r (int): The dimension of latent variables
     nj (p 1darray): For binary/count data: The maximum values that the variable can take. 
                     For ordinal data: the number of different existing categories for each variable
@@ -223,6 +112,10 @@ def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
     ---------------------------------------------------------------------------------------
     returns (dict): All initialisation parameters
     '''
+    
+    L = len(k)
+    numobs = len(y)
+    S = np.prod(k)
     
     #==============================================================
     # Dimension reduction performed with MCA
@@ -235,6 +128,7 @@ def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
                      check_input=True, engine='auto', random_state=42)
     mca = mca.fit(y)
     z1 = mca.row_coordinates(y).values.astype(float)
+    z = [z1]
     
     y = y.values.astype(int)
 
@@ -255,38 +149,51 @@ def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
     #=======================================================
     init = {}
 
-    params = get_MFA_params(z1, k, r)
-    eta = params['eta'][..., n_axis]
-    H = params['H']
-    psi = params['psi']
-    w = params['w']
-    z2 = params['z2']
-        
-    #=======================================================
-    # Enforcing identifiability constraints
-    #=======================================================
-    w_formated = w[..., n_axis, n_axis]
-        
-    etaTeta = eta @ t(eta, (0,2,1))  
+    eta = []
+    H = []
+    psi = []
+    paths_pred = np.zeros((numobs, L))
     
-    E_z1z1T = (w_formated * (psi + etaTeta)).sum(0, keepdims = True)
-    Ez1z1_T = (w_formated * eta).sum(0, keepdims = True)
+    for l in range(L):
+        params = get_MFA_params(z[l], k[l], r[l:])
+        eta.append(params['eta'][..., n_axis])
+        H.append(params['H'])
+        psi.append(params['psi'])
+        z.append(params['z_nextl']) 
+        paths_pred[:, l] = params['classes']
+    
+    w_s = np.unique(paths_pred, return_counts = True, axis = 0)[1] / numobs
+    assert len(w_s) == S # Check all paths have been explored
 
+    w_s = w_s.reshape(*k).flatten('C') 
+
+    #=============================================================
+    # Enforcing identifiability constraints over the first layer
+    #=============================================================
+    
+    full_paths_proba = w_s[..., n_axis, n_axis]
+    mu_s, sigma_s = compute_path_params(eta, H, psi)
+        
+    muTmu = mu_s[0] @ t(mu_s[0], (0, 2, 1)) 
+    E_z1z1T = (full_paths_proba * (sigma_s[0] + muTmu)).sum(0, keepdims = True)
+    Ez1z1_T = (full_paths_proba * mu_s[0]).sum(0, keepdims = True)
+    
     var_z1 = E_z1z1T - Ez1z1_T @ t(Ez1z1_T, (0,2,1)) 
     AT = cholesky(var_z1)
     inv_AT = pinv(AT) 
     
-    psi = inv_AT @ psi @ t(inv_AT, (0, 2, 1))
-    H = inv_AT @ H
-    eta = inv_AT @ (eta -  Ez1z1_T)
+    # Identifiability 
+    psi[0] = inv_AT @ psi[0] @ t(inv_AT, (0, 2, 1))
+    H[0] = inv_AT @ H[0]
+    eta[0] = inv_AT @ (eta[0] -  Ez1z1_T)      
     
     init['eta']  = eta     
     init['H'] = H
     init['psi'] = psi
 
-    init['w'] = w
-    init['z2'] = z2
-    init['preds'] = params['preds']
+    init['w_s'] = w_s # Probabilities of each path through the network
+    init['z'] = z
+    init['classes'] = paths_pred[:,0] 
              
     #=======================================================
     # Determining the coefficients of the GLLVM layer
@@ -301,17 +208,17 @@ def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
         
         if Nj ==  1:  # If the variable is Bernoulli not binomial
             yj = y_bin[:,j]
-            z = z1
+            z_new = z[0]
         else: # If not, need to convert Binomial output to Bernoulli output
-            yj, z = bin_to_bern(Nj, y_bin[:,j], z1)
+            yj, z_new = bin_to_bern(Nj, y_bin[:,j], z[0])
         
         lr = LogisticRegression()
         
         if j < r[0] - 1:
-            lr.fit(z[:,:j + 1], yj)
+            lr.fit(z_new[:,:j + 1], yj)
             lambda_bin[j, :j + 2] = np.concatenate([lr.intercept_, lr.coef_[0]])
         else:
-            lr.fit(z, yj)
+            lr.fit(z_new, yj)
             lambda_bin[j] = np.concatenate([lr.intercept_, lr.coef_[0]])
     
     ## Identifiability of bin coefficients
@@ -325,7 +232,7 @@ def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
         yj = y_ord[:,j]
         
         ol = OrderedLogit()
-        ol.fit(z1, yj)
+        ol.fit(z[0], yj)
         
         ## Identifiability of ordinal coefficients
         beta_j = (ol.beta_.reshape(1, r[0]) @ AT[0]).flatten()

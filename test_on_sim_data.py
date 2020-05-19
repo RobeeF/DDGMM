@@ -8,7 +8,7 @@ Created on Wed Feb  5 17:45:45 2020
 import autograd.numpy as np
 import os
 
-os.chdir('C:/Users/rfuchs/Documents/GitHub/GLMLVM_MFA')
+os.chdir('C:/Users/rfuchs/Documents/GitHub/DDGMM')
 
 from init_params import random_init, init_cv
 from utils import misc

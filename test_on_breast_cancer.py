@@ -47,7 +47,7 @@ labels = labels[y.iloc[:,7] != '?']
 y = y[y.iloc[:,7] != '?']
 y = y.reset_index(drop = True)
 
-k0 = len(np.unique(labels))
+n_clusters = len(np.unique(labels))
 p = y.shape[1]
 
 #===========================================#
@@ -91,10 +91,10 @@ nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
 y_np = y.values
 
 # Launching the algorithm
-r = [5, 1]
+r = [8, 3, 2]
 numobs = len(y)
-M = np.array(r) * 3
-k = [k0]
+M = np.array(r) * 1
+k = [4, n_clusters]
 
 seed = 1
 init_seed = 2
@@ -105,12 +105,20 @@ maxstep = 100
 
 # Prince init
 prince_init = dim_reduce_init(y, k, r, nj, var_distrib, seed = None)
+m, pred = misc(labels_oh, prince_init['classes'], True) 
+print(m)
+print(confusion_matrix(labels_oh, pred))
 
-out = DDGMM(y_np, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed)
+out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed)
 m, pred = misc(labels_oh, out['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
+# Short exploratory SVD 
+u, s, vh = np.linalg.svd(prince_init['z'][0], full_matrices=True)
+
+var_explained = np.round(s**2/np.sum(s**2), decimals=3)
+np.cumsum(var_explained)
 
 
 #==================================================================

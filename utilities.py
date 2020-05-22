@@ -333,3 +333,84 @@ def compute_rho(eta, H, psi, mu_s, sigma_s, z_c, chsi):
                 
     return rho
     
+
+from itertools import product
+
+def add_missing_paths(k, init_paths, init_nb_paths):
+    ''' Add the paths that have been given zeros probabily during init '''
+    
+    L = len(k)
+    all_possible_paths = list(product(*[np.arange(k[l]) for l in range(L)]))
+    existing_paths = [tuple(path.astype(int)) for path in init_paths] # Turn them as a list of tuple
+    nb_existing_paths = deepcopy(init_nb_paths)
+        
+    for idx, path in enumerate(all_possible_paths):
+        if not(path in existing_paths):
+            print('The following path has been added', idx, path)
+            existing_paths.insert(idx, path)
+            nb_existing_paths = np.insert(nb_existing_paths, idx, 0, axis = 0)
+
+    return existing_paths, nb_existing_paths
+
+
+# Numeric stability
+from statsmodels.stats.correlation_tools import cov_nearest
+from autograd.numpy.linalg import cholesky, LinAlgError
+from nearest_correlation import nearcorr
+from autograd.numpy.linalg import multi_dot, eigh
+import sys
+
+def make_symm(X):
+    return np.tril(X, k = -1) + np.tril(X).T
+
+def make_positive_definite(m, tol = None):
+    d = m.shape[0]
+    if (m.shape[1] != d): 
+        raise RuntimeError("Input matrix is not square!")
+    eigvalues, eigvect = eigh(m)
+    
+    # Sort the eigen values
+    idx = eigvalues.argsort()[::-1]   
+    eigvalues = eigvalues[idx]
+    eigvect = eigvect[:,idx]
+            
+    if (tol == None): 
+        tol = d * np.max(np.abs(eigvalues)) * sys.float_info.epsilon
+    delta = 2 * tol
+    tau = np.maximum(0, delta - eigvalues)
+    dm = multi_dot([eigvect, np.diag(tau), eigvect.T])
+    return(m + dm)
+
+def ensure_psd(mtx_list):
+    ''' Check the positive-definiteness of a list of matrix '''
+    
+    L = len(mtx_list)
+    for l in range(L):
+        for idx, X in enumerate(mtx_list[l]):
+            try:
+                cholesky(X)
+            except LinAlgError:
+                #raise RuntimeError('X not psd')
+                print('X not psd')
+                print('Original')
+                print(X)
+                print('Make psd')
+                print(make_positive_definite(make_symm(X)))
+                #print('Covnearrest')
+                #print(cov_nearest(make_symm(X)))
+                #print('Nearrest correlation')
+                #print(nearcorr(make_symm(X), max_iterations=10 ** 3))
+                print('-------------------------------------------------')
+                mtx_list[l][idx] = make_positive_definite(make_symm(X), tol = 10E-5)
+    return mtx_list
+                
+            
+def log_1plusexp(eta):
+    ''' Numerically stable version np.log(1 + np.exp(eta)) '''
+    return np.where(eta >= 10, eta, np.log1p(np.exp(eta)))
+        
+
+def M_growth(it_nb, r):
+    ''' Function that controls the growth rate of M through the iterations'''
+    return 2 * it_nb * np.array(r) # Linear growth rate here
+    

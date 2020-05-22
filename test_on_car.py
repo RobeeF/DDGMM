@@ -44,7 +44,7 @@ y, labels = rus.fit_sample(y, labels)
 
 le = LabelEncoder()
 labels_oh = le.fit_transform(labels)
-k0 = len(np.unique(labels_oh))
+n_clusters = len(np.unique(labels_oh))
 
 
 #===========================================#
@@ -77,10 +77,10 @@ nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
 y_np = y.values
 
 # Launching the algorithm
-r = [5, 4, 3, 2]
+r = [4, 3, 2, 1]
 numobs = len(y)
 M = np.array(r) * 3
-k = [k0, 2, 1]
+k = [6, 5, n_clusters]
 
 seed = 1
 init_seed = 2
@@ -89,16 +89,23 @@ eps = 1E-05
 it = 30
 maxstep = 100
 
-# Prince init
-prince_init = dim_reduce_init(y, k, r, nj, var_distrib,  seed = None)
 
+# Prince init
+    
+prince_init = dim_reduce_init(y, k, r, nj, var_distrib,  seed = None)
 #init = prince_init
 #y = y_np
-out = DDGMM(y_np, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed)
+out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed)
 m, pred = misc(labels_oh, out['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
+
+# Short exploratory SVD 
+u, s, vh = np.linalg.svd(prince_init['z'][0], full_matrices=True)
+
+var_explained = np.round(s**2/np.sum(s**2), decimals=3)
+np.cumsum(var_explained)
 
 #==================================================================
 # Performance measure : Finding the best specification

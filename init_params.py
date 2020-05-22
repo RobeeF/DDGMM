@@ -6,12 +6,13 @@ Created on Mon Feb 10 16:55:44 2020
 """
 
 import os
-os.chdir('C:/Users/rfuchs/Documents/GitHub/GLMLVM_MFA')
+os.chdir('C:/Users/rfuchs/Documents/GitHub/DDGMM')
 
+from identifiability_DGMM import identifiable_estim_DGMM, compute_z_moments
 from sklearn.linear_model import LogisticRegression
 from factor_analyzer import FactorAnalyzer
 from sklearn.mixture import GaussianMixture
-from utilities import compute_path_params
+from utilities import compute_path_params, add_missing_paths
 
 import prince
 import pandas as pd
@@ -22,9 +23,6 @@ from bevel.linear_ordinal_regression import  OrderedLogit
 import autograd.numpy as np
 from autograd.numpy.random import uniform
 from autograd.numpy import newaxis as n_axis
-from autograd.numpy import transpose as t
-from autograd.numpy.linalg import cholesky, pinv
-
 
 ####################################################################################
 ################### MCA GMM + Logistic Regressions initialisation ##################
@@ -162,8 +160,16 @@ def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
         z.append(params['z_nextl']) 
         paths_pred[:, l] = params['classes']
     
-    w_s = np.unique(paths_pred, return_counts = True, axis = 0)[1] / numobs
-    assert len(w_s) == S # Check all paths have been explored
+    paths, nb_paths = np.unique(paths_pred, return_counts = True, axis = 0)
+    paths, nb_paths = add_missing_paths(k, paths, nb_paths)
+    
+    w_s = nb_paths / numobs
+    w_s = np.where(w_s == 0, 1E-16, w_s)
+    
+    # Check all paths have been explored
+    if len(paths) != S:
+        raise RuntimeError('Real path len is', S, 'while the initial number', \
+                           'of path was only',  len(paths))
 
     w_s = w_s.reshape(*k).flatten('C') 
 
@@ -171,21 +177,10 @@ def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
     # Enforcing identifiability constraints over the first layer
     #=============================================================
     
-    full_paths_proba = w_s[..., n_axis, n_axis]
     mu_s, sigma_s = compute_path_params(eta, H, psi)
         
-    muTmu = mu_s[0] @ t(mu_s[0], (0, 2, 1)) 
-    E_z1z1T = (full_paths_proba * (sigma_s[0] + muTmu)).sum(0, keepdims = True)
-    Ez1z1_T = (full_paths_proba * mu_s[0]).sum(0, keepdims = True)
-    
-    var_z1 = E_z1z1T - Ez1z1_T @ t(Ez1z1_T, (0,2,1)) 
-    AT = cholesky(var_z1)
-    inv_AT = pinv(AT) 
-    
-    # Identifiability 
-    psi[0] = inv_AT @ psi[0] @ t(inv_AT, (0, 2, 1))
-    H[0] = inv_AT @ H[0]
-    eta[0] = inv_AT @ (eta[0] -  Ez1z1_T)      
+    Ez1, AT = compute_z_moments(w_s, mu_s, sigma_s)
+    eta, H, psi = identifiable_estim_DGMM(eta, H, psi, Ez1, AT)
     
     init['eta']  = eta     
     init['H'] = H
@@ -193,8 +188,9 @@ def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
 
     init['w_s'] = w_s # Probabilities of each path through the network
     init['z'] = z
-    init['classes'] = paths_pred[:,0] 
-             
+    init['classes'] = paths_pred[:,0] # 0 To change with clustering_layer_idx
+    
+        
     #=======================================================
     # Determining the coefficients of the GLLVM layer
     #=======================================================

@@ -6,11 +6,11 @@ Created on Tue Feb 11 19:33:27 2020
 """
 
 import autograd.numpy as np
-from autograd.numpy import newaxis as n_axis
-from scipy.special import binom
+from autograd.numpy import newaxis as n_axis, log1p
+from scipy.special import binom, expit
 import warnings
 from sklearn.preprocessing import OneHotEncoder
-
+from utilities import log_1plusexp
 warnings.filterwarnings('default')
 
 def log_py_zM_bin_j(lambda_bin_j, y_bin_j, zM, k, nj_bin_j): 
@@ -34,7 +34,9 @@ def log_py_zM_bin_j(lambda_bin_j, y_bin_j, zM, k, nj_bin_j):
     eta = np.transpose(zM, (0, 2, 1)) @ lambda_bin_j[1:].reshape(1, r, 1)
     eta = eta + lambda_bin_j[0].reshape(1, 1, 1) # Add the constant
     
-    den = nj_bin_j * np.log(1 + np.exp(eta))
+    
+    den = nj_bin_j * log_1plusexp(eta)
+    #den = nj_bin_j * np.log(1 + np.exp(eta))
     num = eta @ y_bin_j[np.newaxis, np.newaxis]  
     log_p_y_z = num - den + np.log(coeff_binom)
     
@@ -79,7 +81,7 @@ def binom_loglik_j(lambda_bin_j, y_bin_j, zM, k, ps_y, p_z_ys, nj_bin_j):
 # Ordinal likelihood functions
 ######################################################################
 
-def log_py_zM_ord_j(lambda_ord_j, y_oh_j, zM, k, nj_ord_j): # Prendre uniquement les coeff non 0 avec nj_ord
+def log_py_zM_ord_j(lambda_ord_j, y_oh_j, zM, k, nj_ord_j): 
     ''' Compute log p(y_j | zM, s1 = k1) of each ordinal variable 
     
     lambda_ord_j ( (nj_ord_j + r - 1) 1darray): Coefficients of the ordinal distributions in the GLLVM layer
@@ -92,6 +94,7 @@ def log_py_zM_ord_j(lambda_ord_j, y_oh_j, zM, k, nj_ord_j): # Prendre uniquement
     '''    
     r = zM.shape[1]
     M = zM.shape[0]
+    epsilon = 1E-16 # Numeric stability
     lambda0 = lambda_ord_j[:(nj_ord_j - 1)]
     Lambda = lambda_ord_j[-r:]
  
@@ -102,6 +105,9 @@ def log_py_zM_ord_j(lambda_ord_j, y_oh_j, zM, k, nj_ord_j): # Prendre uniquement
     gamma_prev = np.concatenate([np.zeros((1,M, k, 1)), gamma])
     gamma_next = np.concatenate([gamma, np.ones((1,M, k, 1))])
     pi = gamma_next - gamma_prev
+    
+    pi = np.where(pi <= 0, epsilon, pi)
+    pi = np.where(pi >= 1, 1 - epsilon, pi)
     
     yg = np.expand_dims(y_oh_j.T, 1)[..., np.newaxis, np.newaxis] 
     

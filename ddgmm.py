@@ -42,7 +42,10 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, eps = 1E-05, m
     '''
 
     prev_lik = - 1E12
+    best_lik = -1E12
     tol = 0.01
+    max_patience = 2
+    patience = 0
     
     # Initialize the parameters
     eta = deepcopy(init['eta'])
@@ -187,21 +190,32 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, eps = 1E-05, m
         likelihood.append(new_lik)
         ratio = (new_lik - prev_lik)/abs(prev_lik)
         
-        if (hh < 2): 
+        # Wait for max_patience without likelihood augmentation before stopping the algo
+        if patience < max_patience:
             ratio = 2 * eps
+            patience += 1
+            
+        #if (hh < 2): 
+            #ratio = 2 * eps
         
         # Refresh the classes only if they provide a better explanation of the data
-        if prev_lik < new_lik:
+        if best_lik < new_lik:
+            best_lik = deepcopy(prev_lik)
+            
             idx_to_sum = tuple(set(range(1, L + 1)) - set([clustering_layer + 1]))
             psl1_y = ps_y.reshape(numobs, *k, order = 'C').sum(idx_to_sum) 
 
             classes = np.argmax(psl1_y, axis = 1) 
-            
-        prev_lik = new_lik
         
-        # According to the SEM by Celeux and Diebolt it is a good practice 
-        # to increase the number of MC copies through the iterations
-        M = M_growth(hh, r)
+        if prev_lik < new_lik:
+            patience = 0
+            # According to the SEM by Celeux and Diebolt it is a good practice 
+            # to increase the number of MC copies through the iterations
+            M = M_growth(hh, r)
+        
+        prev_lik = deepcopy(new_lik)
+        print(likelihood)
+
 
     out = dict(likelihood = likelihood, classes = classes)
     return(out)

@@ -8,8 +8,8 @@ Created on Fri Apr  3 11:33:34 2020
 import os 
 os.chdir('C:/Users/rfuchs/Documents/GitHub/DDGMM')
 
-import warnings 
-warnings.simplefilter("default")
+#import warnings 
+#warnings.simplefilter("default")
 
 from init_params import dim_reduce_init
 from ddgmm import DDGMM
@@ -80,9 +80,10 @@ y, var_distrib = gen_categ_as_bin_dataset(y, var_distrib)
 
 # Encode binary data
 le = LabelEncoder()
-for colname in y.columns:
-    if y[colname].dtype != np.int64:
+for col_idx, colname in enumerate(y.columns):
+    if var_distrib[col_idx] == 'bernoulli': # Attention
         y[colname] = le.fit_transform(y[colname])
+
 
 #===========================================#
 # Running the algorithm
@@ -92,10 +93,10 @@ nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
 y_np = y.values
 
 # Launching the algorithm
-r = np.array([6,3,2])
+r = np.array([4,3])
 numobs = len(y)
 M = r * 1
-k = [4, n_clusters]
+k = [n_clusters]
 
 seed = 1
 init_seed = 2
@@ -105,7 +106,7 @@ it = 30
 maxstep = 100
 
 # Prince init
-prince_init = dim_reduce_init(y, k, r, nj, var_distrib, seed = None)
+prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
 out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed)
 m, pred = misc(labels_oh, out['classes'], True) 
 print(m)
@@ -113,6 +114,7 @@ print(confusion_matrix(labels_oh, pred))
 
 # Short exploratory SVD 
 u, s, vh = np.linalg.svd(prince_init['z'][0], full_matrices=True)
+u @ np.diag(s)[np.newaxis] @ vh
 
 var_explained = np.round(s**2/np.sum(s**2), decimals=3)
 np.cumsum(var_explained)
@@ -191,6 +193,8 @@ from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 
 
+res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/mushrooms'
+
 # Feature category (cf)
 cf_non_enc = (vd_categ_non_enc != 'ordinal') & (vd_categ_non_enc != 'binomial')
 
@@ -222,7 +226,7 @@ inits = ['Huang', 'Cao', 'random']
 for init in inits:
     print(init)
     for i in range(nb_trials):
-        km = KModes(n_clusters=k, init=init, n_init=10, verbose=0)
+        km = KModes(n_clusters= n_clusters, init=init, n_init=10, verbose=0)
         kmo_labels = km.fit_predict(y_np_nenc)
         m, pred = misc(labels_oh, kmo_labels, True) 
         micro = precision_score(labels_oh, pred, average = 'micro')
@@ -233,9 +237,13 @@ for init in inits:
         part_res_modes = part_res_modes.append({'it_id': i + 1, 'init': init, \
                             'micro': micro, 'macro': macro, 'purity': purity}, \
                                                ignore_index=True)
-            
+  
+# cao best spe
+#part_res_modes = pd.read_csv(res_folder + '/part_res.csv')
 part_res_modes.groupby('init').mean()
-part_res_modes.to_csv('part_res_modes_mush.csv')
+part_res_modes.groupby('init').std()
+
+part_res_modes.to_csv(res_folder + '/part_res.csv')
 
 #****************************
 # K prototypes
@@ -245,9 +253,9 @@ part_res_proto = pd.DataFrame(columns = ['it_id', 'init', 'micro', 'macro', 'pur
 
 
 for init in inits:
+    print(init)
     for i in range(nb_trials):
-        print(init)
-        km = KPrototypes(n_clusters = k, init = init, n_init=10, verbose=0)
+        km = KPrototypes(n_clusters = n_clusters, init = init, n_init=10, verbose=0)
         kmo_labels = km.fit_predict(y_np_nenc, categorical = np.where(cf_non_enc)[0].tolist())
         m, pred = misc(labels_oh, kmo_labels, True) 
         micro = precision_score(labels_oh, pred, average = 'micro')
@@ -259,8 +267,12 @@ for init in inits:
                             'micro': micro, 'macro': macro, 'purity': purity}, \
                                                ignore_index=True)
 
+# Cao is best
+#part_res_proto = pd.read_csv(res_folder +  '/part_res_proto.csv')
 part_res_proto.groupby('init').mean()
-part_res_proto.to_csv('part_res_proto_mush.csv')
+part_res_proto.groupby('init').std()
+
+part_res_proto.to_csv(res_folder +  '/part_res_proto.csv')
 
 #****************************
 # Hierarchical clustering
@@ -273,7 +285,7 @@ linkages = ['complete', 'average', 'single']
 for linky in linkages: 
     print('Linkage:', linky)
     for i in range(nb_trials):  
-        aglo = AgglomerativeClustering(n_clusters=k, affinity ='precomputed', linkage = linky)
+        aglo = AgglomerativeClustering(n_clusters = n_clusters, affinity ='precomputed', linkage = linky)
         aglo_preds = aglo.fit_predict(dm)
         m, pred = misc(labels_oh, aglo_preds, True) 
         micro = precision_score(labels_oh, pred, average = 'micro')
@@ -285,10 +297,13 @@ for linky in linkages:
                             'micro': micro, 'macro': macro, 'purity': purity},\
                                            ignore_index=True)
 
- 
-hierarch_res.groupby('linkage').mean()
 
-hierarch_res.to_csv('hierarch_res_mush.csv')
+# Average is the best
+#hierarch_res = pd.read_csv(res_folder +  '/hierarch_res.csv')
+hierarch_res.groupby('linkage').mean()
+hierarch_res.groupby('linkage').std()
+
+hierarch_res.to_csv(res_folder +  '/hierarch_res.csv')
 
 #****************************
 # Neural-network based
@@ -303,7 +318,7 @@ for sig in sigmas:
     print('Sigma:', sig)
     for lr in lrs:
         for i in range(nb_trials):
-            som = MiniSom(k, 1, y_np.shape[1], sigma = sig, learning_rate = lr) # initialization of 6x6 SOM
+            som = MiniSom(n_clusters, 1, y_np.shape[1], sigma = sig, learning_rate = lr) # initialization of 6x6 SOM
             som.train(y_np, 100) # trains the SOM with 100 iterations
             som_labels = [som.winner(y_np[i])[0] for i in range(numobs)]
             m, pred = misc(labels_oh, som_labels, True) 
@@ -315,11 +330,13 @@ for sig in sigmas:
             som_res = som_res.append({'it_id': i + 1, 'sigma': sig, 'lr': lr, \
                             'micro': micro, 'macro': macro, 'purity': purity},\
                                      ignore_index=True)
-            
+
+# lr = 0.166733 and sigma = 0.00100is the best specification
+#som_res = pd.read_csv(res_folder +  '/som_res.csv')
 som_res.groupby(['sigma', 'lr']).mean()
+som_res.groupby(['sigma', 'lr']).std()
 
-som_res.to_csv('som_res_mush.csv')
-
+som_res.to_csv(res_folder + '/som_res.csv')
 
 #****************************
 # Other algorithms family
@@ -345,7 +362,7 @@ for lfs in lf_size:
                         
                     dbs_preds = dbs.labels_
                     
-                    if len(np.unique(dbs_preds)) > k:
+                    if len(np.unique(dbs_preds)) > n_clusters:
                         continue
                     
                     m, pred = misc(labels_oh, dbs_preds, True) 
@@ -359,8 +376,13 @@ for lfs in lf_size:
                                     'data': data, 'macro': macro, 'purity': purity},\
                                              ignore_index=True)
 
-dbs_res.groupby(['data','leaf_size', 'eps', 'min_samples']).mean()
-dbs_res.to_csv('dbs_res_mush.csv')
+# Gower is the best nomatter the  other params. No error in computing mean or std ?
+#dbs_res = pd.read_csv(res_folder +  '/dbs_res.csv').iloc[:, 2:]
+np.unique(dbs_res[dbs_res['micro'] > 0.6180]['data'])
+dbs_res[dbs_res['micro'] > 0.6180].groupby(['data','leaf_size', 'eps', 'min_samples']).std()
+
+dbs_res.groupby(['data','leaf_size', 'eps', 'min_samples']).mean().max()
+dbs_res.to_csv(res_folder + '/dbs_res.csv')
 
 
 # https://github.com/arranger1044/pam

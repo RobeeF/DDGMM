@@ -39,7 +39,7 @@ labels = car.iloc[:,-1]
 
 # Rebalancing the data
 samp_dict = {'unacc': 100, 'acc': 100, 'vgood': 65, 'good': 69}
-rus = RandomUnderSampler(sampling_strategy = samp_dict, random_state = 0)
+rus = RandomUnderSampler(sampling_strategy = samp_dict, random_state = 2)
 y, labels = rus.fit_sample(y, labels)
 
 le = LabelEncoder()
@@ -77,10 +77,10 @@ nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
 y_np = y.values
 
 # Launching the algorithm
-r = [4, 3, 2, 1]
+r = [3, 2, 1]
 numobs = len(y)
-M = np.array(r) * 3
-k = [6, 5, n_clusters]
+M = np.array(r) * 1
+k = [7, n_clusters]
 
 seed = 1
 init_seed = 2
@@ -91,8 +91,10 @@ maxstep = 100
 
 
 # Prince init
-    
-prince_init = dim_reduce_init(y, k, r, nj, var_distrib,  seed = None)
+prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib,  seed = None)
+m, pred = misc(labels_oh, prince_init['classes'], True) 
+print(m)
+print(confusion_matrix(labels_oh, pred))
 #init = prince_init
 #y = y_np
 out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed)

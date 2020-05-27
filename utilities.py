@@ -5,6 +5,7 @@ Created on Wed Mar  4 19:26:07 2020
 @author: Utilisateur
 """
 
+import sys
 from scipy import linalg
 from copy import deepcopy
 from itertools import permutations
@@ -354,11 +355,8 @@ def add_missing_paths(k, init_paths, init_nb_paths):
 
 
 # Numeric stability
-from statsmodels.stats.correlation_tools import cov_nearest
 from autograd.numpy.linalg import cholesky, LinAlgError
-from nearest_correlation import nearcorr
 from autograd.numpy.linalg import multi_dot, eigh
-import sys
 
 def make_symm(X):
     return np.tril(X, k = -1) + np.tril(X).T
@@ -390,27 +388,28 @@ def ensure_psd(mtx_list):
             try:
                 cholesky(X)
             except LinAlgError:
-                #raise RuntimeError('X not psd')
-                print('X not psd')
-                print('Original')
-                print(X)
-                print('Make psd')
-                print(make_positive_definite(make_symm(X)))
-                #print('Covnearrest')
-                #print(cov_nearest(make_symm(X)))
-                #print('Nearrest correlation')
-                #print(nearcorr(make_symm(X), max_iterations=10 ** 3))
-                print('-------------------------------------------------')
                 mtx_list[l][idx] = make_positive_definite(make_symm(X), tol = 10E-5)
     return mtx_list
                 
             
-def log_1plusexp(eta):
+def log_1plusexp(eta_):
     ''' Numerically stable version np.log(1 + np.exp(eta)) '''
-    return np.where(eta >= 10, eta, np.log1p(np.exp(eta)))
+
+    eta_original = deepcopy(eta_)
+    eta_ = np.where(eta_ >= np.log(sys.float_info.max), np.log(sys.float_info.max) - 1, eta_) 
+    return np.where(eta_ >= 50, eta_original, np.log1p(np.exp(eta_)))
         
+def expit(eta_):
+    ''' Numerically stable version of 1/(1 + exp(eta)) '''
+    
+    max_value_handled = np.log(np.sqrt(sys.float_info.max) - 1)
+    eta_ = np.where(eta_ <= - max_value_handled + 3, - max_value_handled + 3, eta_) 
+    eta_ = np.where(eta_ >= max_value_handled - 3, np.log(sys.float_info.max) - 3, eta_) 
+
+    return np.where(eta_ <= -50, np.exp(eta_), 1/(1 + np.exp(-eta_)))
+  
 
 def M_growth(it_nb, r):
     ''' Function that controls the growth rate of M through the iterations'''
-    return 2 * it_nb * np.array(r) # Linear growth rate here
+    return (it_nb * np.array(r)).astype(int) # Linear growth rate here
     

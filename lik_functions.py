@@ -6,11 +6,13 @@ Created on Tue Feb 11 19:33:27 2020
 """
 
 import autograd.numpy as np
-from autograd.numpy import newaxis as n_axis, log1p
-from scipy.special import binom, expit
+from autograd.numpy import newaxis as n_axis
+from scipy.special import binom
 import warnings
 from sklearn.preprocessing import OneHotEncoder
-from utilities import log_1plusexp
+from utilities import log_1plusexp, expit
+import sys
+
 warnings.filterwarnings('default')
 
 def log_py_zM_bin_j(lambda_bin_j, y_bin_j, zM, k, nj_bin_j): 
@@ -34,9 +36,7 @@ def log_py_zM_bin_j(lambda_bin_j, y_bin_j, zM, k, nj_bin_j):
     eta = np.transpose(zM, (0, 2, 1)) @ lambda_bin_j[1:].reshape(1, r, 1)
     eta = eta + lambda_bin_j[0].reshape(1, 1, 1) # Add the constant
     
-    
     den = nj_bin_j * log_1plusexp(eta)
-    #den = nj_bin_j * np.log(1 + np.exp(eta))
     num = eta @ y_bin_j[np.newaxis, np.newaxis]  
     log_p_y_z = num - den + np.log(coeff_binom)
     
@@ -94,14 +94,15 @@ def log_py_zM_ord_j(lambda_ord_j, y_oh_j, zM, k, nj_ord_j):
     '''    
     r = zM.shape[1]
     M = zM.shape[0]
-    epsilon = 1E-16 # Numeric stability
+    epsilon = 1E-1 # Numeric stability
     lambda0 = lambda_ord_j[:(nj_ord_j - 1)]
     Lambda = lambda_ord_j[-r:]
  
     broad_lambda0 = lambda0.reshape((nj_ord_j - 1, 1, 1, 1))
     eta = broad_lambda0 - (np.transpose(zM, (0, 2, 1)) @ Lambda.reshape((1, r, 1)))[np.newaxis]
     
-    gamma = 1 / (1 + np.exp(-eta))
+    gamma = expit(eta)
+    
     gamma_prev = np.concatenate([np.zeros((1,M, k, 1)), gamma])
     gamma_next = np.concatenate([gamma, np.ones((1,M, k, 1))])
     pi = gamma_next - gamma_prev
@@ -112,7 +113,7 @@ def log_py_zM_ord_j(lambda_ord_j, y_oh_j, zM, k, nj_ord_j):
     yg = np.expand_dims(y_oh_j.T, 1)[..., np.newaxis, np.newaxis] 
     
     log_p_y_z = yg * np.log(np.expand_dims(pi, axis=2)) 
-    
+   
     return log_p_y_z.sum((0))
 
 def log_py_zM_ord(lambda_ord, y_ord, zM, k, nj_ord): 

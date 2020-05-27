@@ -76,10 +76,10 @@ y, var_distrib = gen_categ_as_bin_dataset(y, var_distrib)
 
 # Encode binary data
 le = LabelEncoder()
-for colname in y.columns:
-    if y[colname].dtype != np.int64:
+for col_idx, colname in enumerate(y.columns):
+    if var_distrib[col_idx] == 'bernoulli': 
         y[colname] = le.fit_transform(y[colname])
-        
+    
 enc = OneHotEncoder(sparse = False, drop = 'first')
 labels_oh = enc.fit_transform(np.array(labels).reshape(-1,1)).flatten()
 
@@ -91,10 +91,10 @@ nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
 y_np = y.values
 
 # Launching the algorithm
-r = [8, 3, 2]
+r = [4, 3]
 numobs = len(y)
 M = np.array(r) * 1
-k = [4, n_clusters]
+k = [n_clusters]
 
 seed = 1
 init_seed = 2
@@ -103,8 +103,8 @@ eps = 1E-05
 it = 30
 maxstep = 100
 
-# Prince init
-prince_init = dim_reduce_init(y, k, r, nj, var_distrib, seed = None)
+# MCA init
+prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
 m, pred = misc(labels_oh, prince_init['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
@@ -120,6 +120,13 @@ u, s, vh = np.linalg.svd(prince_init['z'][0], full_matrices=True)
 var_explained = np.round(s**2/np.sum(s**2), decimals=3)
 np.cumsum(var_explained)
 
+
+# FAMD init
+famd_init = dim_reduce_init(y_categ_non_enc.infer_objects(), n_clusters, \
+                              k, r, nj, vd_categ_non_enc, use_famd = True, seed = None)
+m, pred = misc(labels_oh, famd_init['classes'], True) 
+print(m)
+print(confusion_matrix(labels_oh, pred))
 
 #==================================================================
 # Performance measure : Finding the best specification
@@ -193,6 +200,7 @@ from kmodes.kprototypes import KPrototypes
 from sklearn.cluster import AgglomerativeClustering
 from minisom import MiniSom   
 from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import StandardScaler
 
 # Feature category (cf)
 cf_non_enc = (vd_categ_non_enc != 'ordinal') & (vd_categ_non_enc != 'binomial')
@@ -207,6 +215,8 @@ dm = gower_matrix(y_nenc_typed, cat_features = cf_non_enc)
 # <nb_trials> tries for each specification
 nb_trials = 30
 
+res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/breast'
+
 
 #****************************
 # Partitional algorithm
@@ -219,7 +229,7 @@ inits = ['Huang', 'Cao', 'random']
 for init in inits:
     print(init)
     for i in range(nb_trials):
-        km = KModes(n_clusters=k, init=init, n_init=10, verbose=0)
+        km = KModes(n_clusters= n_clusters, init=init, n_init=10, verbose=0)
         kmo_labels = km.fit_predict(y_np_nenc)
         m, pred = misc(labels_oh, kmo_labels, True) 
         micro = precision_score(labels_oh, pred, average = 'micro')
@@ -231,8 +241,11 @@ for init in inits:
                             'micro': micro, 'macro': macro, 'purity': purity}, \
                                                ignore_index=True)
             
-part_res_modes.groupby('init').mean()
-part_res_modes.to_csv('part_res_modes_breast.csv')
+# Cao best spe
+part_res_modes.groupby('init').mean() 
+part_res_modes.groupby('init').std() 
+
+part_res_modes.to_csv(res_folder + '/part_res_modes.csv')
 
 #****************************
 # K prototypes
@@ -242,9 +255,9 @@ part_res_proto = pd.DataFrame(columns = ['it_id', 'init', 'micro', 'macro', 'pur
 
 
 for init in inits:
+    print(init)
     for i in range(nb_trials):
-        print(init)
-        km = KPrototypes(n_clusters = k, init = init, n_init=10, verbose=0)
+        km = KPrototypes(n_clusters = n_clusters, init = init, n_init=10, verbose=0)
         kmo_labels = km.fit_predict(y_np_nenc, categorical = np.where(cf_non_enc)[0].tolist())
         m, pred = misc(labels_oh, kmo_labels, True) 
         micro = precision_score(labels_oh, pred, average = 'micro')
@@ -256,8 +269,11 @@ for init in inits:
                             'micro': micro, 'macro': macro, 'purity': purity}, \
                                                ignore_index=True)
 
+# Random is best
 part_res_proto.groupby('init').mean()
-part_res_proto.to_csv('part_res_proto_breast.csv')
+part_res_proto.groupby('init').std()
+
+part_res_proto.to_csv(res_folder + '/part_res_proto.csv')
 
 #****************************
 # Hierarchical clustering
@@ -269,7 +285,7 @@ linkages = ['complete', 'average', 'single']
 
 for linky in linkages: 
     for i in range(nb_trials):  
-        aglo = AgglomerativeClustering(n_clusters=k, affinity ='precomputed', linkage = linky)
+        aglo = AgglomerativeClustering(n_clusters = n_clusters, affinity ='precomputed', linkage = linky)
         aglo_preds = aglo.fit_predict(dm)
         m, pred = misc(labels_oh, aglo_preds, True) 
         micro = precision_score(labels_oh, pred, average = 'micro')
@@ -283,14 +299,17 @@ for linky in linkages:
 
  
 hierarch_res.groupby('linkage').mean()
+hierarch_res.groupby('linkage').std()
 
-hierarch_res.to_csv('hierarch_res_breast.csv')
+hierarch_res.to_csv(res_folder + '/hierarch_res.csv')
 
 #****************************
 # Neural-network based
 #****************************
 
 som_res = pd.DataFrame(columns = ['it_id', 'sigma', 'lr' ,'micro', 'macro', 'purity'])
+y_np = y.values
+numobs = len(y)
 
 sigmas = np.linspace(0.001, 3, 5)
 lrs = np.linspace(0.0001, 0.5, 10)
@@ -298,7 +317,7 @@ lrs = np.linspace(0.0001, 0.5, 10)
 for sig in sigmas:
     for lr in lrs:
         for i in range(nb_trials):
-            som = MiniSom(k, 1, y_np.shape[1], sigma = sig, learning_rate = lr) # initialization of 6x6 SOM
+            som = MiniSom(n_clusters, 1, y_np.shape[1], sigma = sig, learning_rate = lr) # initialization of 6x6 SOM
             som.train(y_np, 100) # trains the SOM with 100 iterations
             som_labels = [som.winner(y_np[i])[0] for i in range(numobs)]
             m, pred = misc(labels_oh, som_labels, True) 
@@ -310,15 +329,18 @@ for sig in sigmas:
             som_res = som_res.append({'it_id': i + 1, 'sigma': sig, 'lr': lr, \
                             'micro': micro, 'macro': macro, 'purity': purity},\
                                      ignore_index=True)
-            
+   
 som_res.groupby(['sigma', 'lr']).mean()
-
-som_res.to_csv('som_res_breast.csv')
+som_res.groupby(['sigma', 'lr']).std()
+som_res.to_csv(res_folder + '/som_res.csv')
 
 
 #****************************
 # Other algorithms family
 #****************************
+
+ss = StandardScaler()
+y_scale = ss.fit_transform(y_np)
 
 dbs_res = pd.DataFrame(columns = ['it_id', 'data' ,'leaf_size', 'eps', 'min_samples','micro', 'macro', 'purity'])
 
@@ -340,7 +362,7 @@ for lfs in lf_size:
                         
                     dbs_preds = dbs.labels_
                     
-                    if len(np.unique(dbs_preds)) > k:
+                    if len(np.unique(dbs_preds)) > n_clusters:
                         continue
                     
                     m, pred = misc(labels_oh, dbs_preds, True) 
@@ -354,5 +376,10 @@ for lfs in lf_size:
                                     'data': data, 'macro': macro, 'purity': purity},\
                                              ignore_index=True)
 
-dbs_res.groupby(['data','leaf_size', 'eps', 'min_samples']).mean()
-dbs_res.to_csv('dbs_res_breast.csv')
+# scaled data eps = 3.7525 and min_samples = 4  is the best spe
+mean_res = dbs_res.groupby(['data','leaf_size', 'eps', 'min_samples']).mean()
+dbs_res[(dbs_res['eps'] == 3.7525) & (dbs_res['data'] == 'scaled')].groupby(['leaf_size']).mean()
+
+dbs_res[(dbs_res['eps'] == 3.7525) & (dbs_res['data'] == 'scaled')].groupby(['leaf_size']).std()
+
+dbs_res.to_csv(res_folder + '/dbs_res.csv')

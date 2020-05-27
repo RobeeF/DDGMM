@@ -12,7 +12,11 @@ from identifiability_DGMM import identifiable_estim_DGMM, compute_z_moments
 from sklearn.linear_model import LogisticRegression
 from factor_analyzer import FactorAnalyzer
 from sklearn.mixture import GaussianMixture
-from utilities import compute_path_params, add_missing_paths
+from utilities import compute_path_params, add_missing_paths, \
+    gen_categ_as_bin_dataset
+    
+from sklearn.preprocessing import LabelEncoder 
+
 
 import prince
 import pandas as pd
@@ -94,7 +98,7 @@ def get_MFA_params(zl, kl, rl_nextl):
     return params
 
 
-def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
+def dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, use_famd = False, seed = None):
     ''' Perform dimension reduction into a continuous r dimensional space and determine 
     the init coefficients in that space
     
@@ -122,19 +126,44 @@ def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
     if type(y) != pd.core.frame.DataFrame:
         raise TypeError('y should be a dataframe for prince')
     
-    mca = prince.MCA(n_components = r[0], n_iter=3, copy=True, \
-                     check_input=True, engine='auto', random_state=42)
-    mca = mca.fit(y)
-    z1 = mca.row_coordinates(y).values.astype(float)
+    if (var_distrib == 'ordinal').all():
+        print('PCA init')
+
+        pca = prince.PCA(n_components = r[0], n_iter=3, rescale_with_mean=True,\
+            rescale_with_std=True, copy=True, check_input=True, engine='auto',\
+                random_state = seed)
+        z1 = pca.fit_transform(y).values
+
+    elif use_famd:
+        famd = prince.FAMD(n_components = r[0], n_iter=3, copy=True, check_input=True, \
+                               engine='auto', random_state = seed)
+        z1 = famd.fit_transform(y).values
+            
+        # Encode categorical datas
+        y, var_distrib = gen_categ_as_bin_dataset(y, var_distrib)
+        
+        # Encode binary data
+        le = LabelEncoder()
+        for col_idx, colname in enumerate(y.columns):
+            if var_distrib[col_idx] == 'bernoulli':
+                y[colname] = le.fit_transform(y[colname])
+
+        print(len(var_distrib))
+        print(len(y.columns))
+    else:
+        mca = prince.MCA(n_components = r[0], n_iter=3, copy=True, \
+                         check_input=True, engine='auto', random_state = seed)
+        z1 = mca.fit_transform(y).values
+        #z1 = mca.row_coordinates(y).values.astype(float)
+        
     z = [z1]
-    
     y = y.values.astype(int)
 
     #==============================================================
     # Set the shape parameters of each data type
     #==============================================================    
     
-    y_bin = y[:, np.logical_or(var_distrib == 'bernoulli',var_distrib == 'binomial')]
+    y_bin = y[:, np.logical_or(var_distrib == 'bernoulli', var_distrib == 'binomial')]
     nj_bin = nj[np.logical_or(var_distrib == 'bernoulli',var_distrib == 'binomial')]
     nb_bin = len(nj_bin)
     
@@ -188,7 +217,12 @@ def dim_reduce_init(y, k, r, nj, var_distrib, seed = None):
 
     init['w_s'] = w_s # Probabilities of each path through the network
     init['z'] = z
-    init['classes'] = paths_pred[:,0] # 0 To change with clustering_layer_idx
+    
+    # The clustering layer is the one used to perform the clustering 
+    # i.e. the layer l such that k[l] == n_clusters
+    clustering_layer = np.argmax(np.array(k) == n_clusters)
+    
+    init['classes'] = paths_pred[:,clustering_layer] # 0 To change with clustering_layer_idx
     
         
     #=======================================================

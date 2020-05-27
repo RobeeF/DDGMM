@@ -18,8 +18,7 @@ from copy import deepcopy
 import autograd.numpy as np 
 from autograd.numpy import newaxis as n_axis
 
-
-
+import warnings
 #=============================================================================
 # S Step functions
 #=============================================================================
@@ -85,16 +84,8 @@ def E_step_GLLVM(zl1_s, mu_l1_s, sigma_l1_s, w_s, py_zl1):
     pzl1_s = np.zeros((M0, 1, S0))
         
     for s in range(S0): # Have to retake the function for DGMM to parallelize or use apply along axis
-        try:
-            pzl1_s[:,:, s] = mvnorm.pdf(zl1_s[:,:,s], mean = mu_l1_s[s].flatten(order = 'C'), \
-                                           cov = sigma_l1_s[s])[..., n_axis]
-        except: 
-            print(sigma_l1_s[s])
-            raise RuntimeError('Singular matrix')
-
-    if np.isnan(pzl1_s).any():
-        raise RuntimeError('Nan in pzl1_s')
-            
+        pzl1_s[:,:, s] = mvnorm.pdf(zl1_s[:,:,s], mean = mu_l1_s[s].flatten(order = 'C'), \
+                                           cov = sigma_l1_s[s])[..., n_axis]            
     # Compute p(y | s_i = 1)
     pzl1_s_norm = pzl1_s / np.sum(pzl1_s, axis = 0, keepdims = True) 
     py_s = (pzl1_s_norm * py_zl1).sum(axis = 0)
@@ -108,9 +99,6 @@ def E_step_GLLVM(zl1_s, mu_l1_s, sigma_l1_s, w_s, py_zl1):
     ps_y = ps_y / np.sum(ps_y, axis = 1, keepdims = True)        
     p_y = py_s @ w_s[..., n_axis]
      
-    if np.isnan(pzl1_ys).any():
-        raise RuntimeError('Nan in pzl1_ys')
-    
     return pzl1_ys, ps_y, p_y
 
 #=============================================================================
@@ -144,11 +132,13 @@ def bin_params_GLLVM(y_bin, nj_bin, lambda_bin_old, ps_y, pzl1_ys, zl1_s, AT,\
                     args = (y_bin[:,j], zl1_s, S0, ps_y, pzl1_ys, nj_bin[j]), \
                            tol = tol, method='BFGS', jac = bin_grad_j, 
                            options = {'maxiter': maxstep})
-                
+
+        res = opt.x                
         if not(opt.success):
-            raise RuntimeError('Binomial optimization failed')
+            res = lambda_bin_old[j]
+            warnings.warn('One of the binomial optimisations has failed', RuntimeWarning)
             
-        new_lambda_bin.append(deepcopy(opt.x))  
+        new_lambda_bin.append(deepcopy(res))  
 
     # Last identifiability part
     if nb_bin > 0:
@@ -195,12 +185,14 @@ def ord_params_GLLVM(y_ord, nj_ord, lambda_ord_old, ps_y, pzl1_ys, zl1_s, AT,\
                 constraints = linear_constraint, hess = '2-point',\
                     options = {'maxiter': maxstep})
         
-        if not(opt.success):
-            raise RuntimeError('Ordinal optimization failed')
+        res = opt.x
+        if not(opt.success): # If the program fail, keep the old estimate as value
+            res = lambda_ord_old[j]
+            warnings.warn('One of the ordinal optimisations has failed', RuntimeWarning)
                  
         # Ensure identifiability for Lambda_j
-        new_lambda_ord_j = (opt.x[-r0: ].reshape(1, r0) @ AT[0]).flatten() 
-        new_lambda_ord_j = np.hstack([deepcopy(opt.x[: nj_ord[j] - 1]), new_lambda_ord_j]) 
+        new_lambda_ord_j = (res[-r0: ].reshape(1, r0) @ AT[0]).flatten() 
+        new_lambda_ord_j = np.hstack([deepcopy(res[: nj_ord[j] - 1]), new_lambda_ord_j]) 
         new_lambda_ord.append(new_lambda_ord_j)
     
     return new_lambda_ord

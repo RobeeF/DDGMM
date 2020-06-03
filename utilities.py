@@ -279,7 +279,7 @@ def compute_path_params(eta, H, psi):
         H_repeat = np.repeat(H[l], np.prod(k_aug[l + 1: ]), axis = 0)
         eta_repeat = np.repeat(eta[l], np.prod(k_aug[l + 1: ]), axis = 0)
         psi_repeat = np.repeat(psi[l], np.prod(k_aug[l + 1: ]), axis = 0)
-        
+
         mu_s[l] = eta_repeat + H_repeat @ np.tile(mu_s[l + 1], (k[l], 1, 1))
         
         sigma_s[l] = H_repeat @ np.tile(sigma_s[l + 1], (k[l], 1, 1)) @ t(H_repeat, (0, 2, 1)) \

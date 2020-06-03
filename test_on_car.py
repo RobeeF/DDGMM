@@ -77,10 +77,10 @@ nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
 y_np = y.values
 
 # Launching the algorithm
-r = [3, 2, 1]
+r = [4, 3, 2]
 numobs = len(y)
 M = np.array(r) * 1
-k = [7, n_clusters]
+k = [10, n_clusters]
 
 seed = 1
 init_seed = 2
@@ -102,12 +102,6 @@ m, pred = misc(labels_oh, out['classes'], True)
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
-
-# Short exploratory SVD 
-u, s, vh = np.linalg.svd(prince_init['z'][0], full_matrices=True)
-
-var_explained = np.round(s**2/np.sum(s**2), decimals=3)
-np.cumsum(var_explained)
 
 #==================================================================
 # Performance measure : Finding the best specification

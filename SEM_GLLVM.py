@@ -59,7 +59,7 @@ def fy_zl1(lambda_bin, y_bin, nj_bin, lambda_ord, y_ord, nj_ord, zl1_s):
     nb_bin = len(nj_bin)
 
      
-    log_py_zl1 = np.zeros((M0, numobs, S0)) # l1 standing for the first layer
+    log_py_zl1 = np.zeros((M0, numobs, S0), dtype = np.float) # l1 standing for the first layer
     
     if nb_bin: # First the Count/Binomial variables
         log_py_zl1 += log_py_zM_bin(lambda_bin, y_bin, zl1_s, S0, nj_bin) 

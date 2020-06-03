@@ -7,9 +7,10 @@ Created on Fri May 22 13:07:58 2020
 
 from copy import deepcopy
 from utilities import ensure_psd
+import autograd.numpy as np
 from autograd.numpy import newaxis as n_axis
 from autograd.numpy import transpose as t
-from autograd.numpy.linalg import cholesky, pinv
+from autograd.numpy.linalg import cholesky, pinv, eigh
 
 def compute_z_moments(w_s, mu_s, sigma_s):
     ''' Compute the first moment variance of the latent variable '''
@@ -26,13 +27,25 @@ def compute_z_moments(w_s, mu_s, sigma_s):
     return Ez1, AT
 
 
+def diagonal_cond(H_old, psi_old):
+    ''' Ensure that Lambda Psi^{-1} Lambda'''
+    L = len(H_old)
+    
+    H = []
+    for l in range(L):
+        B = np.transpose(H_old[l], (0, 2, 1)) @ pinv(psi_old[l]) @ H_old[l]
+        values, vec  = eigh(B)
+        H.append(H_old[l] @ vec)
+        B_new = np.transpose(H[l], (0, 2, 1)) @ pinv(psi_old[l]) @ H[l]
+    return H
+
 def identifiable_estim_DGMM(eta_old, H_old, psi_old, Ez1, AT):
     ''' Enforce identifiability conditions for DGMM estimators''' 
 
     eta_new = deepcopy(eta_old)
     H_new = deepcopy(H_old)
     psi_new = deepcopy(psi_old)
-    
+        
     inv_AT = pinv(AT) 
     
     # Identifiability 

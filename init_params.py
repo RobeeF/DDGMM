@@ -148,11 +148,10 @@ def dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, use_famd = False, seed
             if var_distrib[col_idx] == 'bernoulli':
                 y[colname] = le.fit_transform(y[colname])
 
-        print(len(var_distrib))
-        print(len(y.columns))
     else:
-        mca = prince.MCA(n_components = r[0], n_iter=3, copy=True, \
-                         check_input=True, engine='auto', random_state = seed)
+        # Check input = False to remove
+        mca = prince.MCA(n_components = r[0], n_iter=3, copy=True,\
+                         check_input=False, engine='auto', random_state = seed)
         z1 = mca.fit_transform(y).values
         #z1 = mca.row_coordinates(y).values.astype(float)
         

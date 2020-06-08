@@ -8,11 +8,11 @@ Created on Fri Apr  3 11:33:34 2020
 import os 
 os.chdir('C:/Users/rfuchs/Documents/GitHub/DDGMM')
 
-from init_params import dim_reduce_init
 from ddgmm import DDGMM
-from utilities import misc, gen_categ_as_bin_dataset, \
-        ordinal_encoding, compute_nj, cluster_purity
-
+from init_params import dim_reduce_init
+from metrics import misc, cluster_purity
+from data_preprocessing import gen_categ_as_bin_dataset, compute_nj
+        
 import pandas as pd
 import autograd.numpy as np
 
@@ -64,7 +64,6 @@ y_np = y.values
 # Launching the algorithm
 r = np.array([3,2])
 numobs = len(y)
-M = r * 1
 k = [n_clusters]
 
 seed = 1
@@ -81,7 +80,7 @@ m, pred = misc(labels_oh, prince_init['classes'], True)
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
-out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed)
+out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it, eps, maxstep, seed)
 m, pred = misc(labels_oh, out['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
@@ -117,7 +116,6 @@ mca_res = pd.DataFrame(columns = ['it_id', 'r', 'micro', 'macro', 'purity'])
 for r1 in range(2, 9):
     print(r1)
     r = np.array([r1, 1])
-    M = r * 1
     for i in range(nb_trials):
         # Prince init
         prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
@@ -145,7 +143,6 @@ mca_res.to_csv(res_folder + '/mca_res.csv')
 # k = 4,2 and r = 5, 2, 1 best spe used
 r = np.array([7, 5, 3])
 numobs = len(y)
-M = r * 1
 k = [4, n_clusters]
 eps = 1E-05
 it = 30
@@ -153,12 +150,11 @@ maxstep = 30
 
 # First fing the best architecture 
 prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
-out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, eps,\
+out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it, eps,\
             maxstep, seed = None)
 
 r = out['best_r']
 numobs = len(y)
-M = r * 1
 k = out['best_k']
 
 nb_trials= 30
@@ -172,7 +168,7 @@ for i in range(nb_trials):
 
     try:
         out = DDGMM(y_np, n_clusters, r, k, prince_init, \
-                    var_distrib, nj, M, it, eps, maxstep, \
+                    var_distrib, nj, it, eps, maxstep, \
                         seed = None, perform_selec = False)
         m, pred = misc(labels_oh, out['classes'], True) 
         cm = confusion_matrix(labels_oh, pred)

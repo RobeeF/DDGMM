@@ -8,15 +8,18 @@ Created on Mon Feb 10 16:55:44 2020
 import os
 os.chdir('C:/Users/rfuchs/Documents/GitHub/DDGMM')
 
+from copy import deepcopy
+from itertools import product
+
 from identifiability_DGMM import identifiable_estim_DGMM, compute_z_moments
 from sklearn.linear_model import LogisticRegression
 from factor_analyzer import FactorAnalyzer
 from sklearn.mixture import GaussianMixture
-from utilities import compute_path_params, add_missing_paths, \
-    gen_categ_as_bin_dataset, bin_to_bern
+
+from data_preprocessing import gen_categ_as_bin_dataset, bin_to_bern
+from utilities import compute_path_params
     
 from sklearn.preprocessing import LabelEncoder 
-
 
 import prince
 import pandas as pd
@@ -30,6 +33,22 @@ from autograd.numpy import newaxis as n_axis
 ####################################################################################
 ################### MCA GMM + Logistic Regressions initialisation ##################
 ####################################################################################
+
+def add_missing_paths(k, init_paths, init_nb_paths):
+    ''' Add the paths that have been given zeros probabily during init '''
+    
+    L = len(k)
+    all_possible_paths = list(product(*[np.arange(k[l]) for l in range(L)]))
+    existing_paths = [tuple(path.astype(int)) for path in init_paths] # Turn them as a list of tuple
+    nb_existing_paths = deepcopy(init_nb_paths)
+        
+    for idx, path in enumerate(all_possible_paths):
+        if not(path in existing_paths):
+            print('The following path has been added', idx, path)
+            existing_paths.insert(idx, path)
+            nb_existing_paths = np.insert(nb_existing_paths, idx, 0, axis = 0)
+
+    return existing_paths, nb_existing_paths
 
 
 def get_MFA_params(zl, kl, rl_nextl):

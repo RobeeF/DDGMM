@@ -13,10 +13,9 @@ os.chdir('C:/Users/rfuchs/Documents/GitHub/DDGMM')
 
 from init_params import dim_reduce_init
 from ddgmm import DDGMM
-from utilities import misc, gen_categ_as_bin_dataset, \
-        ordinal_encoding, compute_nj, cluster_purity
-
-
+from data_preprocessing import gen_categ_as_bin_dataset, \
+        ordinal_encoding, compute_nj
+from metrics import misc, cluster_purity
 
 import pandas as pd
 import autograd.numpy as np
@@ -96,7 +95,6 @@ y_np = y.values
 
 r = np.array([2, 1])
 numobs = len(y)
-M = r * 1
 k = [n_clusters]
 
 seed = 1
@@ -108,7 +106,7 @@ maxstep = 100
 
 # Prince init
 prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
-out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed)
+out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it, eps, maxstep, seed)
 m, pred = misc(labels_oh, out['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
@@ -132,7 +130,6 @@ mca_res = pd.DataFrame(columns = ['it_id', 'r', 'micro', 'macro', 'purity'])
 for r1 in range(2, 9):
     print(r1)
     r = np.array([r1, 1])
-    M = r * 1
     for i in range(nb_trials):
         # Prince init
         try:
@@ -161,7 +158,6 @@ mca_res.to_csv(res_folder + '/mca_res.csv')
 # DDGMM
 r = np.array([5, 4, 2])
 numobs = len(y)
-M = r * 1
 k = [4, n_clusters]
 eps = 1E-05
 it = 10
@@ -174,7 +170,6 @@ out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, \
 
 r = [2,1]
 numobs = len(y)
-M = r * 1
 k = [2]
 
 nb_trials= 30
@@ -188,7 +183,7 @@ for i in range(nb_trials):
 
     try:
         out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, \
-                    nj, M, it, eps, maxstep, seed = None, perform_selec = False)
+                    nj, it, eps, maxstep, seed = None, perform_selec = False)
         m, pred = misc(labels_oh, out['classes'], True) 
         cm = confusion_matrix(labels_oh, pred)
         purity = cluster_purity(cm)
@@ -367,7 +362,7 @@ for sig in sigmas:
                             'micro': micro, 'macro': macro, 'purity': purity},\
                                      ignore_index=True)
 
-# lr = 0.166733 and sigma = 0.00100is the best specification
+# lr = 0.166733 and sigma = 0.00100 is the best specification
 #som_res = pd.read_csv(res_folder +  '/som_res.csv')
 som_res.groupby(['sigma', 'lr']).mean()
 som_res.groupby(['sigma', 'lr']).std()
@@ -420,6 +415,3 @@ dbs_res[dbs_res['micro'] > 0.6180].groupby(['data','leaf_size', 'eps', 'min_samp
 dbs_res.groupby(['data','leaf_size', 'eps', 'min_samples']).mean().max()
 dbs_res.to_csv(res_folder + '/dbs_res.csv')
 
-
-# https://github.com/arranger1044/pam
-# https://www.researchgate.net/post/What_is_the_best_way_for_cluster_analysis_when_you_have_mixed_type_of_data_categorical_and_scale

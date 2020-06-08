@@ -5,48 +5,49 @@ Created on Fri Mar  6 08:52:28 2020
 @author: RobF
 """
 
+from copy import deepcopy
+
+from numeric_stability import ensure_psd
+from parameter_selection import r_select, k_select 
+
 from identifiability_DGMM import identifiable_estim_DGMM, compute_z_moments, \
     diagonal_cond
                          
-from SEM_DGMM import draw_z_s, fz2_z1s, draw_z2_z1s, fz_ys,\
+from MCEM_DGMM import draw_z_s, fz2_z1s, draw_z2_z1s, fz_ys,\
     E_step_DGMM, M_step_DGMM
 
-from SEM_GLLVM import draw_zl1_ys, fy_zl1, E_step_GLLVM, \
+from MCEM_GLLVM import draw_zl1_ys, fy_zl1, E_step_GLLVM, \
         bin_params_GLLVM, ord_params_GLLVM
   
-from utilities import compute_path_params, compute_chsi, compute_rho, \
-    ensure_psd, M_growth, look_for_simpler_network
+from hyperparameters_selection import M_growth, look_for_simpler_network
+from utilities import compute_path_params, compute_chsi, compute_rho
 
-from parameter_selection import r_select, k_select 
-
-from copy import deepcopy
 import autograd.numpy as np
 from autograd.numpy import transpose as t
 from autograd.numpy import newaxis as n_axis
 
-import matplotlib.pyplot as plt
 
-
-import warnings 
-warnings.simplefilter("ignore") # ATTTTTTENTION !!!!!
-
-def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, \
+def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
           eps = 1E-05, maxstep = 100, seed = None, perform_selec = True): 
+    
     ''' Fit a Generalized Linear Mixture of Latent Variables Model (GLMLVM)
     
     y (numobs x p ndarray): The observations containing categorical variables
+    n_clusters (int): The number of clusters to look for in the data
     r (list): The dimension of latent variables through the first 2 layers
-    k (1d array): The number of components of the latent Gaussian mixture layers
-    it (int): The maximum number of EM iterations of the algorithm
-    eps (float): If the likelihood increase by less than eps then the algorithm stops
-    maxstep (int): The maximum number of optimisation step for each variable
+    k (list): The number of components of the latent Gaussian mixture layers
+    init (dict): The initialisation parameters for the algorithm
     var_distrib (p 1darray): An array containing the types of the variables in y 
     nj (p 1darray): For binary/count data: The maximum values that the variable can take. 
                     For ordinal data: the number of different existing categories for each variable
-    M (list of ints): The number of MC points to use at each layer 
+    it (int): The maximum number of MCEM iterations of the algorithm
+    eps (float): If the likelihood increase by less than eps then the algorithm stops
+    maxstep (int): The maximum number of optimisation step for each variable
     seed (int): The random state seed to set (Only for numpy generated data for the moment)
+    perform_selec (Bool): Whether to perform architecture selection or not
     ------------------------------------------------------------------------------------------------
-    returns (dict): The predicted classes and the likelihood through the EM steps
+    returns (dict): The predicted classes, the likelihood through the EM steps
+                    and a continuous representation of the data
     '''
 
     prev_lik = - 1E12
@@ -81,7 +82,8 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, \
     L = len(k)
     k_aug = k + [1]
     S = np.array([np.prod(k_aug[l:]) for l in range(L + 1)])    
-        
+    M = M_growth(1, r)
+   
     assert nb_ord + nb_bin > 0 
                      
     while (it_num < it) & ((ratio > eps) | (patience <= max_patience)):
@@ -207,9 +209,11 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, \
             
             z = (ps_y[..., n_axis] * Ez_ys[clustering_layer]).sum(1)
             
+            '''
             fig = plt.figure(figsize=(8,8))
             plt.scatter(z[:, 0], z[:, 1])
             plt.show()
+            '''
             
             best_r = deepcopy(r)
             best_k = deepcopy(k)
@@ -217,7 +221,7 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, \
         
         if prev_lik < new_lik:
             patience = 0
-            M = M_growth(it_num + 1, r)
+            M = M_growth(it_num + 2, r)
         else:
             patience += 1
                           
@@ -228,17 +232,12 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, \
         is_not_min_specif = not(np.all(k == [n_clusters]) & np.all(r == [2,1]))
         
         if look_for_simpler_network(it_num) & perform_selec & is_not_min_specif:
-            print('Looking for new arch...')
             r_to_keep = r_select(y_bin, y_ord, zl1_ys, z2_z1s, w_s)
             
             # If r_l == 0, delete the last l + 1: layers
             new_L = np.sum([len(rl) != 0 for rl in r_to_keep]) - 1 
             
             k_to_keep = k_select(w_s, k, new_L, clustering_layer)
-            '''
-            print('r to keep', r_to_keep)
-            print('k to keep', k_to_keep)
-            '''
     
             is_L_unchanged = L == new_L
             is_r_unchanged = np.all([len(r_to_keep[l]) == r[l] for l in range(new_L + 1)])
@@ -294,8 +293,7 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, \
                 L = new_L
                 
                 patience = 0
-                 
-            
+                         
             print('New architecture:')
             print('k', k)
             print('r', r)

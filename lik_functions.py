@@ -9,7 +9,7 @@ import autograd.numpy as np
 from autograd.numpy import newaxis as n_axis
 from scipy.special import binom
 from sklearn.preprocessing import OneHotEncoder
-from utilities import log_1plusexp, expit
+from numeric_stability import log_1plusexp, expit
 
 
 def log_py_zM_bin_j(lambda_bin_j, y_bin_j, zM, k, nj_bin_j): 

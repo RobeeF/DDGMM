@@ -5,7 +5,7 @@ Created on Tue Jun  2 15:39:05 2020
 @author: rfuchs
 """
 
-from utilities import bin_to_bern
+from data_preprocessing import bin_to_bern
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 # Dirty local hard copy of the Github bevel package

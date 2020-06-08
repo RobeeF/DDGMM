@@ -11,18 +11,18 @@ os.chdir('C:/Users/rfuchs/Documents/GitHub/DDGMM')
 
 from copy import deepcopy
 
-from sklearn.preprocessing import LabelEncoder 
+from sklearn.metrics import precision_score
 from sklearn.metrics import confusion_matrix
+from sklearn.preprocessing import LabelEncoder 
 from sklearn.preprocessing import OneHotEncoder
 
 import pandas as pd
 
-from init_params import dim_reduce_init
-from utilities import misc, gen_categ_as_bin_dataset, ordinal_encoding,\
-    compute_nj, cluster_purity
-        
 from ddgmm import DDGMM
-from sklearn.metrics import precision_score
+from init_params import dim_reduce_init
+from metrics import misc, cluster_purity
+from data_preprocessing import gen_categ_as_bin_dataset, \
+        ordinal_encoding, compute_nj
 
 import autograd.numpy as np
 
@@ -93,9 +93,8 @@ y_np = y.values
 # Running the algorithm
 #===========================================# 
 
-r = [2, 1]
+r = [3, 1]
 numobs = len(y)
-M = np.array(r) * 1
 k = [n_clusters]
 
 seed = 1
@@ -111,10 +110,12 @@ m, pred = misc(labels_oh, prince_init['classes'], True)
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
-out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed)
+out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it, eps, maxstep, seed)
 m, pred = misc(labels_oh, out['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
+
+# Plot the final groups
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -139,10 +140,9 @@ print(m)
 print(confusion_matrix(labels_oh, pred))
 
 
-
-#=======================================================================
+#=========================================================================
 # Performance measure : Finding the best specification for init and DDGMM
-#=======================================================================
+#=========================================================================
 
 res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/breast'
 
@@ -158,7 +158,6 @@ mca_res = pd.DataFrame(columns = ['it_id', 'r', 'micro', 'macro', 'purity'])
 for r1 in range(2, 9):
     print(r1)
     r = np.array([r1, 1])
-    M = r * 1
     for i in range(nb_trials):
         # Prince init
         prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
@@ -183,7 +182,6 @@ mca_res.to_csv(res_folder + '/mca_res.csv')
 # DDGMM. Thresholds use: 0.5 and 0.10
 r = np.array([5, 4, 2])
 numobs = len(y)
-M = r * 1
 k = [4, n_clusters]
 eps = 1E-05
 it = 30
@@ -196,11 +194,10 @@ ddgmm_res = pd.DataFrame(columns = ['it_id', 'micro', 'macro', 'purity'])
 
 # First fing the best architecture 
 prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
-out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed = None)
+out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it, eps, maxstep, seed = None)
 
 r = out['best_r']
 numobs = len(y)
-M = r * 1
 k = out['best_k']
 eps = 1E-05
 it = 30
@@ -239,68 +236,6 @@ ddgmm_res.std()
 
 ddgmm_res.to_csv(res_folder + '/ddgmm_res.csv')
 
-
-
-
-#==================================================================
-# Performance measure : Finding the best specification
-#==================================================================
-
-from sklearn.preprocessing import StandardScaler
-
-nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
-y_np = y.values
-
-# Launching the algorithm
-numobs = len(y)
-M = [50, 30]
-k = 2
-
-seed = 1
-init_seed = 2
-    
-eps = 1E-05
-it = 30
-maxstep = 100
-
-ss = StandardScaler()
-y_scale = ss.fit_transform(y_np)
-
-
-nb_trials = 30
-miscs_df = pd.DataFrame(columns = ['it_id', 'r', 'model', 'misc'])
-
-
-for r1 in range(1,6):
-    for r2 in range(1, 5):
-        if r1 <= r2:
-            continue
-
-        print('r1=',r1, 'r2', r2)
-        for i in range(nb_trials):
-            # Prince init
-            prince_init = dim_reduce_init(y, k, [r1, r2], nj, var_distrib, seed = None)
-            miscs_df = miscs_df.append({'it_id': i + 1, 'r': str([r1, r2]), \
-                    'model': 'k-means', 'misc': misc(labels_oh, prince_init['preds'])},\
-                    ignore_index=True)
-        
-            try:
-                out = DDGMM(y_np, [r1, r2], k, prince_init, var_distrib, nj, M, it, eps, maxstep, None)
-                miscs_df = miscs_df.append({'it_id': i + 1, 'r': str([r1, r2]),\
-                    'model': 'MCA & 1L-DGMM','misc': misc(labels_oh, out['classes'])}, \
-                                           ignore_index=True)
-    
-            except:
-                miscs_df = miscs_df.append({'it_id': i + 1, 'r': str([r1, r2]),\
-                            'model': 'MCA & 1L-DGMM', 'misc': np.nan}, \
-                                           ignore_index=True)
-                
-
-miscs_df.boxplot(by = ['r','model'], figsize = (20, 10))
-
-miscs_df[(miscs_df['model'] == 'MCA & 1L-DGMM')].boxplot(by = 'r', figsize = (20, 10))
-
-miscs_df.to_csv('breast_DGMM_MFA.csv')
 
 #=======================================================================
 # Performance measure : Finding the best specification for other algos

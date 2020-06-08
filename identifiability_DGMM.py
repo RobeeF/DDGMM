@@ -36,7 +36,6 @@ def diagonal_cond(H_old, psi_old):
         B = np.transpose(H_old[l], (0, 2, 1)) @ pinv(psi_old[l]) @ H_old[l]
         values, vec  = eigh(B)
         H.append(H_old[l] @ vec)
-        B_new = np.transpose(H[l], (0, 2, 1)) @ pinv(psi_old[l]) @ H[l]
     return H
 
 def identifiable_estim_DGMM(eta_old, H_old, psi_old, Ez1, AT):

@@ -13,7 +13,7 @@ from sklearn.linear_model import LogisticRegression
 from factor_analyzer import FactorAnalyzer
 from sklearn.mixture import GaussianMixture
 from utilities import compute_path_params, add_missing_paths, \
-    gen_categ_as_bin_dataset
+    gen_categ_as_bin_dataset, bin_to_bern
     
 from sklearn.preprocessing import LabelEncoder 
 
@@ -25,35 +25,11 @@ import pandas as pd
 from bevel.linear_ordinal_regression import  OrderedLogit 
 
 import autograd.numpy as np
-from autograd.numpy.random import uniform
 from autograd.numpy import newaxis as n_axis
 
 ####################################################################################
 ################### MCA GMM + Logistic Regressions initialisation ##################
 ####################################################################################
-
-def bin_to_bern(Nj, yj_binom, zM_binom):
-    ''' Split the binomial variable into Bernoulli. Them just recopy the corresponding zM.
-    It is necessary to fit binary logistic regression
-    Example: yj has support in [0,10]: Then if y_ij = 3 generate a vector with 3 ones and 7 zeros 
-    (3 success among 10).
-    
-    Nj (int): The upper bound of the support of yj_binom
-    yj_binom (numobs 1darray): The Binomial variable considered
-    zM_binom (numobs x r nd-array): The continuous representation of the data
-    -----------------------------------------------------------------------------------
-    returns (tuple of 2 (numobs x Nj) arrays): The "Bernoullied" Binomial variable
-    '''
-    
-    n_yk = len(yj_binom) # parameter k of the binomial
-    
-    # Generate Nj Bernoullis from each binomial and get a (numobsxNj, 1) table
-    u = uniform(size =(n_yk,Nj))
-    p = (yj_binom/Nj)[..., n_axis]
-    yk_bern = (u > p).astype(int).flatten('A')#[..., n_axis] 
-        
-    return yk_bern, np.repeat(zM_binom, Nj, 0)
-
 
 
 def get_MFA_params(zl, kl, rl_nextl):

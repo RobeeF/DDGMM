@@ -15,18 +15,23 @@ from SEM_GLLVM import draw_zl1_ys, fy_zl1, E_step_GLLVM, \
         bin_params_GLLVM, ord_params_GLLVM
   
 from utilities import compute_path_params, compute_chsi, compute_rho, \
-    ensure_psd, M_growth
-    
+    ensure_psd, M_growth, look_for_simpler_network
+
 from parameter_selection import r_select, k_select 
 
 from copy import deepcopy
 import autograd.numpy as np
 from autograd.numpy import transpose as t
- 
+from autograd.numpy import newaxis as n_axis
+
+import matplotlib.pyplot as plt
+
+
 import warnings 
 warnings.simplefilter("ignore") # ATTTTTTENTION !!!!!
 
-def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, eps = 1E-05, maxstep = 100, seed = None): 
+def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, \
+          eps = 1E-05, maxstep = 100, seed = None, perform_selec = True): 
     ''' Fit a Generalized Linear Mixture of Latent Variables Model (GLMLVM)
     
     y (numobs x p ndarray): The observations containing categorical variables
@@ -60,7 +65,7 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, eps = 1E-05, m
    
     numobs = len(y)
     likelihood = []
-    hh = 0
+    it_num = 0
     ratio = 1000
     np.random.seed = seed
         
@@ -76,16 +81,15 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, eps = 1E-05, m
     L = len(k)
     k_aug = k + [1]
     S = np.array([np.prod(k_aug[l:]) for l in range(L + 1)])    
-    
-    # The clustering layer is the one used to perform the clustering 
-    # i.e. the layer l such that k[l] == n_clusters
-    clustering_layer = np.argmax(np.array(k) == n_clusters)
-    
+        
     assert nb_ord + nb_bin > 0 
                      
-    while ((hh < it) & (ratio > eps)):
-        print(hh)
-        hh = hh + 1
+    while (it_num < it) & ((ratio > eps) | (patience <= max_patience)):
+        print(it_num)
+
+        # The clustering layer is the one used to perform the clustering 
+        # i.e. the layer l such that k[l] == n_clusters
+        clustering_layer = np.argmax(np.array(k) == n_clusters)
 
         #####################################################################################
         ################################# S step ############################################
@@ -190,107 +194,119 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, M, it = 50, eps = 1E-05, m
         new_lik = np.sum(np.log(p_y))
         likelihood.append(new_lik)
         ratio = (new_lik - prev_lik)/abs(prev_lik)
-        
-        # Wait for max_patience without likelihood augmentation before stopping the algo
-        if patience < max_patience:
-            ratio = 2 * eps
-            patience += 1
-            
-        #if (hh < 2): 
-            #ratio = 2 * eps
-        
+        print(likelihood)
+
         # Refresh the classes only if they provide a better explanation of the data
         if best_lik < new_lik:
             best_lik = deepcopy(prev_lik)
             
             idx_to_sum = tuple(set(range(1, L + 1)) - set([clustering_layer + 1]))
-            psl1_y = ps_y.reshape(numobs, *k, order = 'C').sum(idx_to_sum) 
+            psl_y = ps_y.reshape(numobs, *k, order = 'C').sum(idx_to_sum) 
 
-            classes = np.argmax(psl1_y, axis = 1) 
+            classes = np.argmax(psl_y, axis = 1) 
+            
+            z = (ps_y[..., n_axis] * Ez_ys[clustering_layer]).sum(1)
+            
+            fig = plt.figure(figsize=(8,8))
+            plt.scatter(z[:, 0], z[:, 1])
+            plt.show()
+            
+            best_r = deepcopy(r)
+            best_k = deepcopy(k)
+
         
         if prev_lik < new_lik:
             patience = 0
-            # According to the SEM by Celeux and Diebolt it is a good practice 
-            # to increase the number of MC copies through the iterations
-            M = M_growth(hh, r)
-        
-        prev_lik = deepcopy(new_lik)
-        print(likelihood)
-        
+            M = M_growth(it_num + 1, r)
+        else:
+            patience += 1
+                          
         ###########################################################################
         ######################## Parameter selection  #############################
         ###########################################################################
-          
-        r_to_keep = r_select(y_bin, y_ord, zl1_ys, z2_z1s)
-        k_to_keep = k_select(w_s, k, L)
-        print('r to keep', r_to_keep)
-        print('k to keep', k_to_keep)
-
         
-        is_r_unchanged = np.all([len(r_to_keep[l]) == r[l] for l in range(L + 1)])
-        is_k_unchanged = np.all([len(k_to_keep[l]) == k[l] for l in range(L)])
-          
-        is_selection = not(is_r_unchanged & is_k_unchanged)
-        is_selection = False # For the moment
+        is_not_min_specif = not(np.all(k == [n_clusters]) & np.all(r == [2,1]))
         
-        # If r_l == 0 or k_l = 1 (?) delete the last l + 1: layers
-        new_L = np.min([np.sum([len(rl) != 0 for rl in r_to_keep]) - 1, \
-                       np.sum([len(kl) != 0 for kl in k_to_keep])]) # Check k condition
+        if look_for_simpler_network(it_num) & perform_selec & is_not_min_specif:
+            print('Looking for new arch...')
+            r_to_keep = r_select(y_bin, y_ord, zl1_ys, z2_z1s, w_s)
             
-        assert new_L > 0
-        
-        if is_selection:           
-        
-            eta = [eta[l][k_to_keep[l]] for l in range(new_L)]
-            eta = [eta[l][:, r_to_keep[l]] for l in range(new_L)]
+            # If r_l == 0, delete the last l + 1: layers
+            new_L = np.sum([len(rl) != 0 for rl in r_to_keep]) - 1 
             
-            H = [H[l][k_to_keep[l]] for l in range(new_L)]
-            H = [H[l][:, r_to_keep[l]] for l in range(new_L)]
-            H = [H[l][:, :, r_to_keep[l + 1]] for l in range(new_L)]
+            k_to_keep = k_select(w_s, k, new_L, clustering_layer)
+            '''
+            print('r to keep', r_to_keep)
+            print('k to keep', k_to_keep)
+            '''
+    
+            is_L_unchanged = L == new_L
+            is_r_unchanged = np.all([len(r_to_keep[l]) == r[l] for l in range(new_L + 1)])
+            is_k_unchanged = np.all([len(k_to_keep[l]) == k[l] for l in range(new_L)])
+              
+            is_selection = not(is_r_unchanged & is_k_unchanged & is_L_unchanged )
             
-            psi = [psi[l][k_to_keep[l]] for l in range(new_L)]
-            psi = [psi[l][:, r_to_keep[l]] for l in range(new_L)]
-            psi = [psi[l][:, :, r_to_keep[l]] for l in range(new_L)]
+            assert new_L > 0
             
-            bin_r_to_keep = np.concatenate([[0], np.array(r_to_keep[0]) + 1]) # Add the intercept
-            lambda_bin = lambda_bin[:, bin_r_to_keep]
+            if is_selection:           
+                
+                eta = [eta[l][k_to_keep[l]] for l in range(new_L)]
+                eta = [eta[l][:, r_to_keep[l]] for l in range(new_L)]
+                
+                H = [H[l][k_to_keep[l]] for l in range(new_L)]
+                H = [H[l][:, r_to_keep[l]] for l in range(new_L)]
+                H = [H[l][:, :, r_to_keep[l + 1]] for l in range(new_L)]
+                
+                psi = [psi[l][k_to_keep[l]] for l in range(new_L)]
+                psi = [psi[l][:, r_to_keep[l]] for l in range(new_L)]
+                psi = [psi[l][:, :, r_to_keep[l]] for l in range(new_L)]
+                
+                if nb_bin > 0:
+                    # Add the intercept:
+                    bin_r_to_keep = np.concatenate([[0], np.array(r_to_keep[0]) + 1]) 
+                    lambda_bin = lambda_bin[:, bin_r_to_keep]
+                 
+                if nb_ord > 0:
+                    # Intercept coefficients handling is a little more complicated here
+                    lambda_ord_intercept = [lambda_ord_j[:-r[0]] for lambda_ord_j in lambda_ord]
+                    Lambda_ord_var = np.stack([lambda_ord_j[-r[0]:] for lambda_ord_j in lambda_ord])
+                    Lambda_ord_var = Lambda_ord_var[:, r_to_keep[0]]
+                    lambda_ord = [np.concatenate([lambda_ord_intercept[j], Lambda_ord_var[j]])\
+                                  for j in range(nb_ord)]
+    
+                w = w_s.reshape(*k, order = 'C')
+                new_k_idx_grid = np.ix_(*k_to_keep[:new_L])
+                
+                # If layer deletion, sum the last components of the paths
+                if L > new_L: 
+                    deleted_dims = tuple(range(L)[new_L:])
+                    w_s = w[new_k_idx_grid].sum(deleted_dims).flatten(order = 'C')
+                else:
+                    w_s = w[new_k_idx_grid].flatten(order = 'C')
+    
+                w_s /= w_s.sum()
+    
+                k = [len(k_to_keep[l]) for l in range(new_L)]
+                r = [len(r_to_keep[l]) for l in range(new_L + 1)]
+                
+                k_aug = k + [1]
+                S = np.array([np.prod(k_aug[l:]) for l in range(new_L + 1)])    
+                L = new_L
+                
+                patience = 0
+                 
             
-            # Intercept coefficients handling is a little more complicated here
-            lambda_ord_intercept = [lambda_ord_j[:-r[0]] for lambda_ord_j in lambda_ord]
-            Lambda_ord_var = np.stack([lambda_ord_j[-r[0]:] for lambda_ord_j in lambda_ord])
-            Lambda_ord_var = Lambda_ord_var[:, r_to_keep[0]]
-            lambda_ord = [np.concatenate([lambda_ord_intercept[j], Lambda_ord_var[j]])\
-                          for j in range(nb_ord)]
+            print('New architecture:')
+            print('k', k)
+            print('r', r)
+            print('L', L)
+            print('S',S)
+            print("w_s", len(w_s))
+            
+        prev_lik = deepcopy(new_lik)
+        it_num = it_num + 1
 
-            w = w_s.reshape(*k, order = 'C')
-            new_k_idx_grid = np.ix_(*k_to_keep)
-            w_s = w[new_k_idx_grid].flatten(order = 'C')
-
-            k = [len(k_to_keep[l]) for l in range(new_L)]
-            r = [len(r_to_keep[l]) for l in range(new_L + 1)]
-            
-            k_aug = k + [1]
-            S = np.array([np.prod(k_aug[l:]) for l in range(new_L + 1)])    
-            L = new_L
-            
-            patience = 0
-            
-            # Add layer selection OK 
-            # Add control that r strictly decreasing OK
-            # Add that update at a time, or at a given iteration
-            # And reset patience (set to -1 ?) OK 
-        
-        print('New architecture:')
-        print('k', k)
-        print('r', r)
-        print('L', L)
-
-        #print('k to keep', k_to_keep)
-        #print('rl1_to_keep to keep', rl1_to_keep)
-        #print('other_r_to_keep to keep', other_r_to_keep)
-        # Check clustering layer has still the right number of components
-
-
-    out = dict(likelihood = likelihood, classes = classes)
+    out = dict(likelihood = likelihood, classes = classes, z = z, \
+               best_r = best_r, best_k = best_k)
     return(out)
 

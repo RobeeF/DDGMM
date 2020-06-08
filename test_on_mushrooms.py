@@ -14,12 +14,15 @@ os.chdir('C:/Users/rfuchs/Documents/GitHub/DDGMM')
 from init_params import dim_reduce_init
 from ddgmm import DDGMM
 from utilities import misc, gen_categ_as_bin_dataset, \
-        ordinal_encoding, compute_nj
+        ordinal_encoding, compute_nj, cluster_purity
+
+
 
 import pandas as pd
 import autograd.numpy as np
 
 from copy import deepcopy
+from sklearn.metrics import precision_score
 from sklearn.preprocessing import LabelEncoder 
 from sklearn.metrics import confusion_matrix
 
@@ -84,16 +87,14 @@ for col_idx, colname in enumerate(y.columns):
     if var_distrib[col_idx] == 'bernoulli': # Attention
         y[colname] = le.fit_transform(y[colname])
 
+nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
+y_np = y.values
 
 #===========================================#
 # Running the algorithm
 #===========================================# 
 
-nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
-y_np = y.values
-
-# Launching the algorithm
-r = np.array([4,3])
+r = np.array([2, 1])
 numobs = len(y)
 M = r * 1
 k = [n_clusters]
@@ -102,7 +103,7 @@ seed = 1
 init_seed = 2
     
 eps = 1E-05
-it = 30
+it = 10
 maxstep = 100
 
 # Prince init
@@ -112,78 +113,113 @@ m, pred = misc(labels_oh, out['classes'], True)
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
-# Short exploratory SVD 
-u, s, vh = np.linalg.svd(prince_init['z'][0], full_matrices=True)
-u @ np.diag(s)[np.newaxis] @ vh
 
-var_explained = np.round(s**2/np.sum(s**2), decimals=3)
-np.cumsum(var_explained)
+#=======================================================================
+# Performance measure : Finding the best specification for init and DDGMM
+#=======================================================================
+
+res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/mushrooms'
 
 
-#==================================================================
-# Performance measure : Finding the best specification
-#==================================================================
+# Init
+# Best one r = (2,1)
+numobs = len(y)
+k = [n_clusters]
 
-from sklearn.preprocessing import StandardScaler
+nb_trials= 30
+mca_res = pd.DataFrame(columns = ['it_id', 'r', 'micro', 'macro', 'purity'])
 
-nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
-y_np = y.values
+for r1 in range(2, 9):
+    print(r1)
+    r = np.array([r1, 1])
+    M = r * 1
+    for i in range(nb_trials):
+        # Prince init
+        try:
+            prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
+            m, pred = misc(labels_oh, prince_init['classes'], True) 
+            cm = confusion_matrix(labels_oh, pred)
+            purity = cluster_purity(cm)
+                
+            micro = precision_score(labels_oh, pred, average = 'micro')
+            macro = precision_score(labels_oh, pred, average = 'macro')
+            #print(micro)
+            #print(macro)
+        
+            mca_res = mca_res.append({'it_id': i + 1, 'r': str(r), 'micro': micro, 'macro': macro, \
+                                            'purity': purity}, ignore_index=True)
+        except:
+            mca_res = mca_res.append({'it_id': i + 1, 'r': str(r), 'micro': np.nan, 'macro': np.nan, \
+                                            'purity': np.nan}, ignore_index=True)            
+       
 
-# Launching the algorithm
+mca_res.groupby('r').mean()
+mca_res.groupby('r').std()
+
+mca_res.to_csv(res_folder + '/mca_res.csv')
+
+# DDGMM
+r = np.array([5, 4, 2])
+numobs = len(y)
+M = r * 1
+k = [4, n_clusters]
+eps = 1E-05
+it = 10
+maxstep = 30
+
+# First fing the best architecture 
+prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
+out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, \
+            eps, maxstep, seed = None)
+
+r = [2,1]
+numobs = len(y)
+M = r * 1
 k = [2]
 
-seed = 1
-init_seed = 2
-    
-eps = 1E-05
-it = 30
-maxstep = 100
+nb_trials= 30
+ddgmm_res = pd.DataFrame(columns = ['it_id', 'micro', 'macro', 'purity'])
 
-ss = StandardScaler()
-y_scale = ss.fit_transform(y_np)
+for i in range(nb_trials):
 
+    print(i)
+    # Prince init
+    prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
 
-nb_trials = 5
-miscs_df = pd.DataFrame(columns = ['it_id', 'r', 'model', 'misc'])
-
-for r1 in range(1,4):
-    for r2 in range(1, 3):
-        if r1 <= r2:
-            continue
-
-        M = np.array([r1,r2]) * 4
-        M[1] = M[1]* 2
-
-        print('r1=',r1, 'r2', r2)
-        for i in range(nb_trials):
-            # Prince init
-            prince_init = dim_reduce_init(y, k, [r1, r2], nj, var_distrib, seed = None)
-            miscs_df = miscs_df.append({'it_id': i + 1, 'r': str([r1, r2]), 'model': 'k-means', 'misc': misc(labels_oh, prince_init['preds'])},\
-                                       ignore_index=True)
+    try:
+        out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, \
+                    nj, M, it, eps, maxstep, seed = None, perform_selec = False)
+        m, pred = misc(labels_oh, out['classes'], True) 
+        cm = confusion_matrix(labels_oh, pred)
+        purity = cluster_purity(cm)
         
-            try:
-                out = DDGMM(y_np, [r1, r2], k, prince_init, var_distrib, nj, M, it, eps, maxstep, None)
-                miscs_df = miscs_df.append({'it_id': i + 1, 'r': str([r1, r2]), 'model': 'MCA & 1L-DGMM','misc': misc(labels_oh, out['classes'])}, \
-                                           ignore_index=True)
-    
-            except:
-                miscs_df = miscs_df.append({'it_id': i + 1, 'r': str([r1, r2]), 'model': 'MCA & 1L-DGMM', 'misc': np.nan}, \
-                                           ignore_index=True)
-                
+        micro = precision_score(labels_oh, pred, average = 'micro')
+        macro = precision_score(labels_oh, pred, average = 'macro')
+        print(micro)
+        print(macro)
 
-miscs_df.boxplot(by = ['r','model'], figsize = (20, 10))
+        ddgmm_res = ddgmm_res.append({'it_id': i + 1, 'micro': micro, 'macro': macro, \
+                                    'purity': purity}, ignore_index=True)
+        ddgmm_res.to_csv(res_folder + '/ddgmm_res.csv')
 
-miscs_df[(miscs_df['model'] == 'MCA & 1L-DGMM')].boxplot(by = 'r', figsize = (20, 10))
+    except:
+        ddgmm_res = ddgmm_res.append({'it_id': i + 1, 'micro': np.nan, 'macro': np.nan, \
+                                    'purity': np.nan}, ignore_index=True)
 
-miscs_df.to_csv('mush_DGMM_MFA.csv')
+
+
+ddgmm_res.mean()
+ddgmm_res.std()
+
+ddgmm_res.to_csv(res_folder + '/ddgmm_res.csv')
+
+
 
 
 #=======================================================================
 # Performance measure : Finding the best specification for other algos
 #=======================================================================
 
-from sklearn.metrics import precision_score
-from utilities import cluster_purity
 from gower import gower_matrix
 from kmodes.kmodes import KModes
 from kmodes.kprototypes import KPrototypes

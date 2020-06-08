@@ -17,7 +17,9 @@ import matplotlib as mpl
 import autograd.numpy as np
 import matplotlib.pyplot as plt
 
+from itertools import product
 from autograd.numpy.linalg import pinv
+from autograd.numpy.random import uniform
 from autograd.numpy import newaxis as n_axis
 from autograd.numpy import transpose as t
 
@@ -227,6 +229,31 @@ def cluster_purity(cm):
     return np.sum(np.amax(cm, axis=0)) / np.sum(cm) 
 
 
+def bin_to_bern(Nj, yj_binom, zM_binom):
+    ''' Split the binomial variable into Bernoulli. Them just recopy the corresponding zM.
+    It is necessary to fit binary logistic regression
+    Example: yj has support in [0,10]: Then if y_ij = 3 generate a vector with 3 ones and 7 zeros 
+    (3 success among 10).
+    
+    Nj (int): The upper bound of the support of yj_binom
+    yj_binom (numobs 1darray): The Binomial variable considered
+    zM_binom (numobs x r nd-array): The continuous representation of the data
+    -----------------------------------------------------------------------------------
+    returns (tuple of 2 (numobs x Nj) arrays): The "Bernoullied" Binomial variable
+    '''
+    
+    n_yk = len(yj_binom) # parameter k of the binomial
+    
+    # Generate Nj Bernoullis from each binomial and get a (numobsxNj, 1) table
+    u = uniform(size =(n_yk,Nj))
+    p = (yj_binom/Nj)[..., n_axis]
+    yk_bern = (u > p).astype(int).flatten('A')#[..., n_axis] 
+        
+    return yk_bern, np.repeat(zM_binom, Nj, 0)
+
+
+
+
 ##########################################################################################################
 #################################### DGMM Utils ##########################################################
 ##########################################################################################################
@@ -335,7 +362,6 @@ def compute_rho(eta, H, psi, mu_s, sigma_s, z_c, chsi):
     return rho
     
 
-from itertools import product
 
 def add_missing_paths(k, init_paths, init_nb_paths):
     ''' Add the paths that have been given zeros probabily during init '''
@@ -409,7 +435,17 @@ def expit(eta_):
     return np.where(eta_ <= -50, np.exp(eta_), 1/(1 + np.exp(-eta_)))
   
 
+#def M_growth(it_nb, r):
+    #''' Function that controls the growth rate of M through the iterations'''
+    #return (it_nb * np.array(r)).astype(int) # Linear growth rate here
+
+
 def M_growth(it_nb, r):
     ''' Function that controls the growth rate of M through the iterations'''
-    return (it_nb * np.array(r)).astype(int) # Linear growth rate here
+    return (2 * np.array(r)).astype(int)
     
+def look_for_simpler_network(it_num):
+    if it_num in [0, 1, 7, 10]:
+        return True
+    else:
+        return False

@@ -18,9 +18,12 @@ from sklearn.preprocessing import OneHotEncoder
 import pandas as pd
 
 from init_params import dim_reduce_init
-from utilities import misc, gen_categ_as_bin_dataset, ordinal_encoding, compute_nj
+from utilities import misc, gen_categ_as_bin_dataset, ordinal_encoding,\
+    compute_nj, cluster_purity
         
 from ddgmm import DDGMM
+from sklearn.metrics import precision_score
+
 import autograd.numpy as np
 
 
@@ -83,24 +86,23 @@ for col_idx, colname in enumerate(y.columns):
 enc = OneHotEncoder(sparse = False, drop = 'first')
 labels_oh = enc.fit_transform(np.array(labels).reshape(-1,1)).flatten()
 
+nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
+y_np = y.values
+
 #===========================================#
 # Running the algorithm
 #===========================================# 
 
-nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
-y_np = y.values
-
-# Launching the algorithm
-r = [6, 3, 2, 1]
+r = [2, 1]
 numobs = len(y)
 M = np.array(r) * 1
-k = [5, n_clusters, 1]
+k = [n_clusters]
 
 seed = 1
 init_seed = 2
     
 eps = 1E-05
-it = 30
+it = 15
 maxstep = 100
 
 # MCA init
@@ -114,6 +116,20 @@ m, pred = misc(labels_oh, out['classes'], True)
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+
+colors = ['red','green']
+
+fig = plt.figure(figsize=(8,8))
+plt.scatter(out["z"][:, 0], out["z"][:, 1]  ,c=labels_oh, cmap=matplotlib.colors.ListedColormap(colors))
+
+cb = plt.colorbar()
+loc = np.arange(0,max(labels_oh),max(labels_oh)/float(len(colors)))
+cb.set_ticks(loc)
+cb.set_ticklabels(colors)
+
 
 # FAMD init
 famd_init = dim_reduce_init(y_categ_non_enc.infer_objects(), n_clusters, \
@@ -121,6 +137,109 @@ famd_init = dim_reduce_init(y_categ_non_enc.infer_objects(), n_clusters, \
 m, pred = misc(labels_oh, famd_init['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
+
+
+
+#=======================================================================
+# Performance measure : Finding the best specification for init and DDGMM
+#=======================================================================
+
+res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/breast'
+
+
+# Init
+# Best one r = (2,1)
+numobs = len(y)
+k = [n_clusters]
+
+nb_trials= 30
+mca_res = pd.DataFrame(columns = ['it_id', 'r', 'micro', 'macro', 'purity'])
+
+for r1 in range(2, 9):
+    print(r1)
+    r = np.array([r1, 1])
+    M = r * 1
+    for i in range(nb_trials):
+        # Prince init
+        prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
+        m, pred = misc(labels_oh, prince_init['classes'], True) 
+        cm = confusion_matrix(labels_oh, pred)
+        purity = cluster_purity(cm)
+            
+        micro = precision_score(labels_oh, pred, average = 'micro')
+        macro = precision_score(labels_oh, pred, average = 'macro')
+        #print(micro)
+        #print(macro)
+    
+        mca_res = mca_res.append({'it_id': i + 1, 'r': str(r), 'micro': micro, 'macro': macro, \
+                                        'purity': purity}, ignore_index=True)
+       
+
+mca_res.groupby('r').mean()
+mca_res.groupby('r').std()
+
+mca_res.to_csv(res_folder + '/mca_res.csv')
+
+# DDGMM. Thresholds use: 0.5 and 0.10
+r = np.array([5, 4, 2])
+numobs = len(y)
+M = r * 1
+k = [4, n_clusters]
+eps = 1E-05
+it = 30
+maxstep = 100
+
+nb_trials= 30
+ddgmm_res = pd.DataFrame(columns = ['it_id', 'micro', 'macro', 'purity'])
+
+
+
+# First fing the best architecture 
+prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
+out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed = None)
+
+r = out['best_r']
+numobs = len(y)
+M = r * 1
+k = out['best_k']
+eps = 1E-05
+it = 30
+maxstep = 100
+
+nb_trials= 30
+ddgmm_res = pd.DataFrame(columns = ['it_id', 'micro', 'macro', 'purity'])
+
+for i in range(nb_trials):
+
+    print(i)
+    # Prince init
+    prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
+
+    try:
+        out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, M, it, eps, maxstep, seed = None)
+        m, pred = misc(labels_oh, out['classes'], True) 
+        cm = confusion_matrix(labels_oh, pred)
+        purity = cluster_purity(cm)
+        
+        micro = precision_score(labels_oh, pred, average = 'micro')
+        macro = precision_score(labels_oh, pred, average = 'macro')
+        print(micro)
+        print(macro)
+
+        ddgmm_res = ddgmm_res.append({'it_id': i + 1, 'micro': micro, 'macro': macro, \
+                                    'purity': purity}, ignore_index=True)
+    except:
+        ddgmm_res = ddgmm_res.append({'it_id': i + 1, 'micro': np.nan, 'macro': np.nan, \
+                                    'purity': np.nan}, ignore_index=True)
+
+
+
+ddgmm_res.mean()
+ddgmm_res.std()
+
+ddgmm_res.to_csv(res_folder + '/ddgmm_res.csv')
+
+
 
 
 #==================================================================
@@ -187,8 +306,6 @@ miscs_df.to_csv('breast_DGMM_MFA.csv')
 # Performance measure : Finding the best specification for other algos
 #=======================================================================
 
-from sklearn.metrics import precision_score
-from utilities import cluster_purity
 from gower import gower_matrix
 from kmodes.kmodes import KModes
 from kmodes.kprototypes import KPrototypes

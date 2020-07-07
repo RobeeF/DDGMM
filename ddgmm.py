@@ -243,7 +243,7 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
             is_r_unchanged = np.all([len(r_to_keep[l]) == r[l] for l in range(new_L + 1)])
             is_k_unchanged = np.all([len(k_to_keep[l]) == k[l] for l in range(new_L)])
               
-            is_selection = not(is_r_unchanged & is_k_unchanged & is_L_unchanged )
+            is_selection = not(is_r_unchanged & is_k_unchanged & is_L_unchanged)
             
             assert new_L > 0
             

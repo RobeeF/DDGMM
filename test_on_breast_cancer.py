@@ -115,6 +115,27 @@ m, pred = misc(labels_oh, out['classes'], True)
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
+#========================================
+# Test zone: Be careful 
+#========================================
+
+# test of the silhouette coeff
+from gower import gower_matrix
+from sklearn.metrics import silhouette_score
+
+# Feature category (cf)
+cf_non_enc = (vd_categ_non_enc != 'ordinal') & (vd_categ_non_enc != 'binomial')
+
+# Non encoded version of the dataset:
+y_nenc_typed = y_categ_non_enc.astype(np.object)
+y_np_nenc = y_nenc_typed.values
+
+# Defining distances over the non encoded features
+dm = gower_matrix(y_nenc_typed, cat_features = cf_non_enc) 
+silhouette_score(dm, pred, metric = 'precomputed')
+
+
+
 # Plot the final groups
 
 import matplotlib
@@ -132,12 +153,15 @@ cb.set_ticks(loc)
 cb.set_ticklabels(colors)
 
 
+
+
 # FAMD init
 famd_init = dim_reduce_init(y_categ_non_enc.infer_objects(), n_clusters, \
                               k, r, nj, vd_categ_non_enc, use_famd = True, seed = None)
 m, pred = misc(labels_oh, famd_init['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
+
 
 
 #=========================================================================
@@ -249,6 +273,7 @@ from minisom import MiniSom
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 
+
 # Feature category (cf)
 cf_non_enc = (vd_categ_non_enc != 'ordinal') & (vd_categ_non_enc != 'binomial')
 
@@ -258,6 +283,8 @@ y_np_nenc = y_nenc_typed.values
 
 # Defining distances over the non encoded features
 dm = gower_matrix(y_nenc_typed, cat_features = cf_non_enc) 
+
+
 
 # <nb_trials> tries for each specification
 nb_trials = 30

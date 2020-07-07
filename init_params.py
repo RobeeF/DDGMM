@@ -11,7 +11,8 @@ os.chdir('C:/Users/rfuchs/Documents/GitHub/DDGMM')
 from copy import deepcopy
 from itertools import product
 
-from identifiability_DGMM import identifiable_estim_DGMM, compute_z_moments
+from identifiability_DGMM import identifiable_estim_DGMM, compute_z_moments,\
+        diagonal_cond
 from sklearn.linear_model import LogisticRegression
 from factor_analyzer import FactorAnalyzer
 from sklearn.mixture import GaussianMixture
@@ -204,6 +205,7 @@ def dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, use_famd = False, seed
         
     Ez1, AT = compute_z_moments(w_s, mu_s, sigma_s)
     eta, H, psi = identifiable_estim_DGMM(eta, H, psi, Ez1, AT)
+    H = diagonal_cond(H, psi)
     
     init['eta']  = eta     
     init['H'] = H

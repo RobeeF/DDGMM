@@ -93,7 +93,7 @@ y_np = y.values
 # Running the algorithm
 #===========================================# 
 
-r = [3, 1]
+r = [2, 1]
 numobs = len(y)
 k = [n_clusters]
 

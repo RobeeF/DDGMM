@@ -50,10 +50,10 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
                     and a continuous representation of the data
     '''
 
-    prev_lik = - 1E12
-    best_lik = -1E12
+    prev_lik = - 1E16
+    best_lik = -1E16
     tol = 0.01
-    max_patience = 2
+    max_patience = 1
     patience = 0
     
     # Initialize the parameters
@@ -82,7 +82,7 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
     L = len(k)
     k_aug = k + [1]
     S = np.array([np.prod(k_aug[l:]) for l in range(L + 1)])    
-    M = M_growth(1, r)
+    M = M_growth(1, r, numobs)
    
     assert nb_ord + nb_bin > 0 
                      
@@ -176,6 +176,12 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         eta, H, psi = identifiable_estim_DGMM(eta, H, psi, Ez1, AT)
         
         del(Ez1)
+        '''
+        print(eta[-1].mean())
+        print(H[-1].mean())
+        print(psi[-1].mean())
+        '''
+
         #=======================================================
         # Compute GLLVM Parameters
         #=======================================================
@@ -221,15 +227,16 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         
         if prev_lik < new_lik:
             patience = 0
-            M = M_growth(it_num + 2, r)
+            M = M_growth(it_num + 2, r, numobs)
         else:
             patience += 1
                           
         ###########################################################################
         ######################## Parameter selection  #############################
         ###########################################################################
-        
-        is_not_min_specif = not(np.all(k == [n_clusters]) & np.all(r == [2,1]))
+
+        is_not_min_specif = not(np.all(np.array(k) == n_clusters) & np.array_equal(r, [2,1]))
+
         
         if look_for_simpler_network(it_num) & perform_selec & is_not_min_specif:
             r_to_keep = r_select(y_bin, y_ord, zl1_ys, z2_z1s, w_s)
@@ -293,13 +300,15 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
                 L = new_L
                 
                 patience = 0
-                         
+            
+            
             print('New architecture:')
             print('k', k)
             print('r', r)
             print('L', L)
             print('S',S)
             print("w_s", len(w_s))
+            
             
         prev_lik = deepcopy(new_lik)
         it_num = it_num + 1

@@ -8,15 +8,19 @@ Created on Mon Feb 10 16:55:44 2020
 import os
 os.chdir('C:/Users/rfuchs/Documents/GitHub/DDGMM')
 
-from identifiability_DGMM import identifiable_estim_DGMM, compute_z_moments
+from copy import deepcopy
+from itertools import product
+
+from identifiability_DGMM import identifiable_estim_DGMM, compute_z_moments,\
+        diagonal_cond
 from sklearn.linear_model import LogisticRegression
 from factor_analyzer import FactorAnalyzer
 from sklearn.mixture import GaussianMixture
-from utilities import compute_path_params, add_missing_paths, \
-    gen_categ_as_bin_dataset
+
+from data_preprocessing import gen_categ_as_bin_dataset, bin_to_bern
+from utilities import compute_path_params
     
 from sklearn.preprocessing import LabelEncoder 
-
 
 import prince
 import pandas as pd
@@ -25,35 +29,27 @@ import pandas as pd
 from bevel.linear_ordinal_regression import  OrderedLogit 
 
 import autograd.numpy as np
-from autograd.numpy.random import uniform
 from autograd.numpy import newaxis as n_axis
 
 ####################################################################################
 ################### MCA GMM + Logistic Regressions initialisation ##################
 ####################################################################################
 
-def bin_to_bern(Nj, yj_binom, zM_binom):
-    ''' Split the binomial variable into Bernoulli. Them just recopy the corresponding zM.
-    It is necessary to fit binary logistic regression
-    Example: yj has support in [0,10]: Then if y_ij = 3 generate a vector with 3 ones and 7 zeros 
-    (3 success among 10).
+def add_missing_paths(k, init_paths, init_nb_paths):
+    ''' Add the paths that have been given zeros probabily during init '''
     
-    Nj (int): The upper bound of the support of yj_binom
-    yj_binom (numobs 1darray): The Binomial variable considered
-    zM_binom (numobs x r nd-array): The continuous representation of the data
-    -----------------------------------------------------------------------------------
-    returns (tuple of 2 (numobs x Nj) arrays): The "Bernoullied" Binomial variable
-    '''
-    
-    n_yk = len(yj_binom) # parameter k of the binomial
-    
-    # Generate Nj Bernoullis from each binomial and get a (numobsxNj, 1) table
-    u = uniform(size =(n_yk,Nj))
-    p = (yj_binom/Nj)[..., n_axis]
-    yk_bern = (u > p).astype(int).flatten('A')#[..., n_axis] 
+    L = len(k)
+    all_possible_paths = list(product(*[np.arange(k[l]) for l in range(L)]))
+    existing_paths = [tuple(path.astype(int)) for path in init_paths] # Turn them as a list of tuple
+    nb_existing_paths = deepcopy(init_nb_paths)
         
-    return yk_bern, np.repeat(zM_binom, Nj, 0)
+    for idx, path in enumerate(all_possible_paths):
+        if not(path in existing_paths):
+            print('The following path has been added', idx, path)
+            existing_paths.insert(idx, path)
+            nb_existing_paths = np.insert(nb_existing_paths, idx, 0, axis = 0)
 
+    return existing_paths, nb_existing_paths
 
 
 def get_MFA_params(zl, kl, rl_nextl):
@@ -148,11 +144,10 @@ def dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, use_famd = False, seed
             if var_distrib[col_idx] == 'bernoulli':
                 y[colname] = le.fit_transform(y[colname])
 
-        print(len(var_distrib))
-        print(len(y.columns))
     else:
-        mca = prince.MCA(n_components = r[0], n_iter=3, copy=True, \
-                         check_input=True, engine='auto', random_state = seed)
+        # Check input = False to remove
+        mca = prince.MCA(n_components = r[0], n_iter=3, copy=True,\
+                         check_input=False, engine='auto', random_state = seed)
         z1 = mca.fit_transform(y).values
         #z1 = mca.row_coordinates(y).values.astype(float)
         
@@ -210,6 +205,7 @@ def dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, use_famd = False, seed
         
     Ez1, AT = compute_z_moments(w_s, mu_s, sigma_s)
     eta, H, psi = identifiable_estim_DGMM(eta, H, psi, Ez1, AT)
+    H = diagonal_cond(H, psi)
     
     init['eta']  = eta     
     init['H'] = H

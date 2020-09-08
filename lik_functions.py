@@ -8,12 +8,9 @@ Created on Tue Feb 11 19:33:27 2020
 import autograd.numpy as np
 from autograd.numpy import newaxis as n_axis
 from scipy.special import binom
-import warnings
 from sklearn.preprocessing import OneHotEncoder
-from utilities import log_1plusexp, expit
-import sys
+from numeric_stability import log_1plusexp, expit
 
-warnings.filterwarnings('default')
 
 def log_py_zM_bin_j(lambda_bin_j, y_bin_j, zM, k, nj_bin_j): 
     ''' Compute log p(y_j | zM, s1 = k1) of the jth
@@ -31,6 +28,10 @@ def log_py_zM_bin_j(lambda_bin_j, y_bin_j, zM, k, nj_bin_j):
     numobs = len(y_bin_j)
     
     yg = np.repeat(y_bin_j[np.newaxis], axis = 0, repeats = M)
+    yg = yg.astype(np.float)
+
+    nj_bin_j = np.float(nj_bin_j)
+
     coeff_binom = binom(nj_bin_j, yg).reshape(M, 1, numobs)
     
     eta = np.transpose(zM, (0, 2, 1)) @ lambda_bin_j[1:].reshape(1, r, 1)
@@ -40,7 +41,7 @@ def log_py_zM_bin_j(lambda_bin_j, y_bin_j, zM, k, nj_bin_j):
     num = eta @ y_bin_j[np.newaxis, np.newaxis]  
     log_p_y_z = num - den + np.log(coeff_binom)
     
-    return np.transpose(log_p_y_z, (0, 2, 1))
+    return np.transpose(log_p_y_z, (0, 2, 1)).astype(np.float)
 
 def log_py_zM_bin(lambda_bin, y_bin, zM, k, nj_bin):
     ''' Compute sum_j log p(y_j | zM, s1 = k1) of all the binomial data with a for loop

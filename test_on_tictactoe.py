@@ -1,35 +1,32 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Mar 24 17:37:43 2020
+Created on Fri Apr  3 11:33:34 2020
 
 @author: rfuchs
 """
 
 import os 
-
 os.chdir('C:/Users/rfuchs/Documents/GitHub/DDGMM')
 
-from copy import deepcopy
-from gower import gower_matrix
-from sklearn.metrics import precision_score
-from sklearn.metrics import silhouette_score
-from sklearn.metrics import confusion_matrix
-from sklearn.preprocessing import LabelEncoder 
-from sklearn.preprocessing import OneHotEncoder
-
-import pandas as pd
 
 from ddgmm import DDGMM
+from gower import gower_matrix
 from init_params import dim_reduce_init
 from metrics import misc
-from data_preprocessing import gen_categ_as_bin_dataset, \
-        ordinal_encoding, compute_nj
-
+from data_preprocessing import gen_categ_as_bin_dataset, compute_nj
+        
+import pandas as pd
 import autograd.numpy as np
+
+from copy import deepcopy
+from sklearn.metrics import precision_score
+from sklearn.metrics import silhouette_score
+
+from sklearn.preprocessing import LabelEncoder 
 
 
 ###############################################################################################
-#################            Breast cancer vizualisation          #############################
+##############        Clustering on the Tic Tac Toe dataset (UCI)          ######################
 ###############################################################################################
 
 #===========================================#
@@ -37,55 +34,28 @@ import autograd.numpy as np
 #===========================================#
 os.chdir('C:/Users/rfuchs/Documents/These/Stats/mixed_dgmm/datasets')
 
-br = pd.read_csv('breast_cancer/breast.csv', sep = ',', header = None)
-y = br.iloc[:,1:]
-labels = br.iloc[:,0]
+# Importing and selecting data
+ttt = pd.read_csv('tictactoe/tic-tac-toe.csv', sep = ',', header = None)
+ttt = ttt.infer_objects()
 
-y = y.infer_objects()
+y = ttt.iloc[:,:-1]
 
-# Droping missing values
-labels = labels[y.iloc[:,4] != '?']
-y = y[y.iloc[:,4] != '?']
-
-labels = labels[y.iloc[:,7] != '?']
-y = y[y.iloc[:,7] != '?']
-y = y.reset_index(drop = True)
-
-n_clusters = len(np.unique(labels))
-p = y.shape[1]
+le = LabelEncoder()
+labels = ttt.iloc[:,-1]
+labels_oh = le.fit_transform(labels)
+n_clusters = len(np.unique(labels_oh))
 
 #===========================================#
 # Formating the data
 #===========================================#
-var_distrib = np.array(['ordinal', 'ordinal', 'ordinal', 'ordinal', \
-                        'bernoulli', 'ordinal', 'categorical',
-                        'categorical', 'bernoulli'])
-    
-ord_idx = np.where(var_distrib == 'ordinal')[0]
 
-all_labels = [np.unique(y.iloc[:,idx]) for idx in ord_idx]
-all_labels[1] = ['premeno', 'lt40', 'ge40']
+var_distrib = np.array(['categorical' for var in range(y.shape[1])])
 
-all_codes = [list(range(len(lab))) for lab in all_labels]    
-
-# Encode ordinal data
-for i, idx in enumerate(ord_idx):
-    y.iloc[:,idx] = ordinal_encoding(y.iloc[:,idx], all_labels[i], all_codes[i])
-    
 y_categ_non_enc = deepcopy(y)
 vd_categ_non_enc = deepcopy(var_distrib)
 
 # Encode categorical datas
 y, var_distrib = gen_categ_as_bin_dataset(y, var_distrib)
-
-# Encode binary data
-le = LabelEncoder()
-for col_idx, colname in enumerate(y.columns):
-    if var_distrib[col_idx] == 'bernoulli': 
-        y[colname] = le.fit_transform(y[colname])
-    
-enc = OneHotEncoder(sparse = False, drop = 'first')
-labels_oh = enc.fit_transform(np.array(labels).reshape(-1,1)).flatten()
 
 nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
 y_np = y.values
@@ -108,7 +78,8 @@ dm = gower_matrix(y_nenc_typed, cat_features = cf_non_enc)
 # Running the algorithm
 #===========================================# 
 
-r = [3, 2, 1]
+# Launching the algorithm
+r = np.array([3, 2, 1])
 numobs = len(y)
 k = [n_clusters, 2]
 
@@ -116,36 +87,30 @@ seed = 1
 init_seed = 2
     
 eps = 1E-05
-it = 15
+it = 30
 maxstep = 100
 
-# MCA init
+
+# Prince init
 prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
 m, pred = misc(labels_oh, prince_init['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
-out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it,\
-            eps, maxstep, seed, perform_selec = False)
+out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it, eps,\
+            maxstep, seed, perform_selec = False)
 m, pred = misc(labels_oh, out['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
-#========================================
-# Test zone: Be careful 
-#========================================
-
-
-# Plot the final groups
 
 import matplotlib
 import matplotlib.pyplot as plt
-import numpy as np
 
 colors = ['red','green']
 
 fig = plt.figure(figsize=(8,8))
-plt.scatter(out["z"][:, 0], out["z"][:, 1]  ,c=labels_oh, cmap=matplotlib.colors.ListedColormap(colors))
+plt.scatter(out["z"][:, 0], out["z"][:, 1]  ,c=pred, cmap=matplotlib.colors.ListedColormap(colors))
 
 cb = plt.colorbar()
 loc = np.arange(0,max(labels_oh),max(labels_oh)/float(len(colors)))
@@ -153,25 +118,13 @@ cb.set_ticks(loc)
 cb.set_ticklabels(colors)
 
 
-
-# FAMD init
-famd_init = dim_reduce_init(y_categ_non_enc.infer_objects(), n_clusters, \
-                              k, r, nj, vd_categ_non_enc, use_famd = True, seed = None)
-m, pred = misc(labels_oh, famd_init['classes'], True) 
-print(m)
-print(confusion_matrix(labels_oh, pred))
-
-
-
-#=========================================================================
+#=======================================================================
 # Performance measure : Finding the best specification for init and DDGMM
-#=========================================================================
-
-res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/breast'
-
+#=======================================================================
+res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/tictactoe'
 
 # Init
-# Best one r = (2,1)
+# Best one r = (4,1)
 numobs = len(y)
 k = [n_clusters]
 
@@ -193,13 +146,15 @@ for r1 in range(2, 9):
         mca_res = mca_res.append({'it_id': i + 1, 'r': str(r), 'micro': micro, 'macro': macro, \
                                         'silhouette': sil}, ignore_index=True)
        
-
 mca_res.groupby('r').mean()
 mca_res.groupby('r').std()
 
 mca_res.to_csv(res_folder + '/mca_res.csv')
 
+
 # DDGMM. Thresholds use: 0.25 and 0.10
+# r = 5, 1
+# k = 2, 1
 r = np.array([5, 4, 3])
 numobs = len(y)
 k = [4, n_clusters]
@@ -263,11 +218,11 @@ from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 
 
+res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/tictactoe'
 
 # <nb_trials> tries for each specification
 nb_trials = 30
 
-res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/breast'
 
 
 #****************************
@@ -294,10 +249,13 @@ for init in inits:
                                                ignore_index=True)
             
 # Cao best spe
+#part_res_modes = pd.read_csv(res_folder + '/part_res_modes.csv')
+
 part_res_modes.groupby('init').mean() 
 part_res_modes.groupby('init').std() 
 
 part_res_modes.to_csv(res_folder + '/part_res_modes.csv')
+
 
 #****************************
 # K prototypes
@@ -350,7 +308,8 @@ for linky in linkages:
                             'micro': micro, 'macro': macro, 'silhouette': sil},\
                                            ignore_index=True)
 
- 
+#hierarch_res = pd.read_csv(res_folder + '/hierarch_res.csv')
+
 hierarch_res.groupby('linkage').mean()
 hierarch_res.groupby('linkage').std()
 
@@ -388,6 +347,8 @@ for sig in sigmas:
                             'micro': micro, 'macro': macro, 'silhouette': sil},\
                                      ignore_index=True)
    
+#som_res = pd.read_csv(res_folder + '/som_res.csv')
+
 som_res.groupby(['sigma', 'lr']).mean()
 som_res.groupby(['sigma', 'lr']).mean().max()
 
@@ -442,6 +403,8 @@ for lfs in lf_size:
                                 'eps': eps, 'min_samples': min_s, 'micro': micro,\
                                     'data': data, 'macro': macro, 'silhouette': sil},\
                                              ignore_index=True)
+
+#dbs_res = pd.read_csv(res_folder + '/dbs_res.csv')
 
 # scaled data eps = 3.7525 and min_samples = 4  is the best spe
 mean_res = dbs_res.groupby(['data','leaf_size', 'eps', 'min_samples']).mean()

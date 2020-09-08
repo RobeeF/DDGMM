@@ -20,11 +20,19 @@ from autograd.numpy import newaxis as n_axis
 
 import warnings
 #=============================================================================
-# S Step functions
+# MC Step functions
 #=============================================================================
 
 def draw_zl1_ys(z_s, py_zl1, M):
-    ''' Draw from p(z1 | y, s) proportional to p(y | z1) * p(z1 | s) for all s '''
+    ''' Draw from p(z1 | y, s) proportional to p(y | z1) * p(z1 | s) for all s 
+    z_s (list of nd-arrays): zl | s^l for all s^l and all l.
+    py_zl1 (nd-array): p(y | z1_M) 
+    M (list of int): The number of MC points on all layers
+    ------------------------------------------------------------------------
+    returns ((M1, numobs, r1, S1) nd-array): z^{(1)} | y, s
+    '''
+    # Would be cleaner if just passed z1 rather than zl for all l and M1
+    # Rather than M[l] for all l
     
     numobs = py_zl1.shape[1]
     L = len(z_s) - 1
@@ -50,7 +58,18 @@ def draw_zl1_ys(z_s, py_zl1, M):
 #=============================================================================
 
 def fy_zl1(lambda_bin, y_bin, nj_bin, lambda_ord, y_ord, nj_ord, zl1_s):
-    ''' Compute p(y | z^{0})  '''
+    ''' Compute log p(y | z1) = sum_{s= 1}^S[0] p(y, s| z1) as in Cagnone and 
+    Viroli (2014)
+    lambda_bin (nb_bin x (1 + r1) nd-array): The binomial coefficients
+    y_bin (numobs x nb_bin nd-array): The binary/count data
+    nj_bin (list of int): The number of modalities for each bin variable
+    lambda_ord (list of nb_ord_j x (nj_ord + r1) elements): The ordinal coefficients
+    y_ord (numobs x nb_ord nd-array): The ordinal data
+    nj_ord (list of int): The number of modalities for each ord variable
+    zl1_s ((M1, r1, s1) nd-array): z1 | s 
+    ------------------------------------------------------------------------------
+    returns ((M1, numobs, S1) nd-array):log p(y | z1_M)
+    '''
     M0 = zl1_s.shape[0]
     S0 = zl1_s.shape[2] 
     numobs = len(y_bin)
@@ -59,7 +78,7 @@ def fy_zl1(lambda_bin, y_bin, nj_bin, lambda_ord, y_ord, nj_ord, zl1_s):
     nb_bin = len(nj_bin)
 
      
-    log_py_zl1 = np.zeros((M0, numobs, S0)) # l1 standing for the first layer
+    log_py_zl1 = np.zeros((M0, numobs, S0), dtype = np.float) # l1 standing for the first layer
     
     if nb_bin: # First the Count/Binomial variables
         log_py_zl1 += log_py_zM_bin(lambda_bin, y_bin, zl1_s, S0, nj_bin) 
@@ -70,15 +89,21 @@ def fy_zl1(lambda_bin, y_bin, nj_bin, lambda_ord, y_ord, nj_ord, zl1_s):
     
     py_zl1 = np.exp(log_py_zl1)
     py_zl1 = np.where(py_zl1 == 0, 1E-50, py_zl1)
-    
-    if np.isnan(py_zl1).any():
-        py_zl1 = np.where(np.isnan(py_zl1), 1E-50, py_zl1)
-        raise RuntimeError('Nan in py_zl1')      
+            
     return py_zl1
 
 
 def E_step_GLLVM(zl1_s, mu_l1_s, sigma_l1_s, w_s, py_zl1):
-    
+    ''' Compute the distributions involved involved in the E step of 
+    the GLLVM coefficients estimations
+    zl1_s ((M1, r1, s1) nd-array): z1 | s 
+    mu_l1_s (nd-array): mu_s for all s in S1 (mu_s starting from the 1st layer)
+    sigma_l1_s (nd-array): sigma_s for all s in S1 (sigma_s starting from the 1st layer)
+    w_s (list of length s1): The path probabilities for all s in S1
+    py_zl1 (nd-array): p(y | z1_M)
+    ----------------------------------------------------------------------------
+    returns (tuple of len 3): p(z1 |y, s), p(s |y) and p(y)
+    '''
     M0 = zl1_s.shape[0]
     S0 = zl1_s.shape[2] 
     pzl1_s = np.zeros((M0, 1, S0))
@@ -107,6 +132,21 @@ def E_step_GLLVM(zl1_s, mu_l1_s, sigma_l1_s, w_s, py_zl1):
 
 def bin_params_GLLVM(y_bin, nj_bin, lambda_bin_old, ps_y, pzl1_ys, zl1_s, AT,\
                      tol = 1E-5, maxstep = 100):
+    ''' Determine the GLLVM coefficients related to binomial coefficients by 
+    optimizing each column coefficients separately.
+    y_bin (numobs x nb_bin nd-array): The binomial data
+    nj_bin (list of int): The number of modalities for each count/binary variable
+    lambda_bin_old (list of nb_ord_j x (nj_ord + r1) elements): The binomial coefficients
+                                                    of the previous iteration
+    ps_y ((numobs, S) nd-array): p(s | y) for all s in Omega
+    pzl1_ys (nd-array): p(z1 | y, s)
+    zl1_s ((M1, r1, s1) nd-array): z1 | s 
+    AT ((r1 x r1) nd-array): Var(z1)^{-1/2}
+    tol (int): Control when to stop the optimisation process
+    maxstep (int): The maximum number of optimization step.
+    ----------------------------------------------------------------------
+    returns (list of nb_bin_j x (nj_ord + r1) elements): The new bin coefficients
+    '''
     
     r0 = zl1_s.shape[1] 
     S0 = zl1_s.shape[2] 
@@ -150,7 +190,21 @@ def bin_params_GLLVM(y_bin, nj_bin, lambda_bin_old, ps_y, pzl1_ys, zl1_s, AT,\
 
 def ord_params_GLLVM(y_ord, nj_ord, lambda_ord_old, ps_y, pzl1_ys, zl1_s, AT,\
                      tol = 1E-5, maxstep = 100):
-    
+    ''' Determine the GLLVM coefficients related to ordinal coefficients by 
+    optimizing each column coefficients separately.
+    y_ord (numobs x nb_ord nd-array): The ordinal data
+    nj_ord (list of int): The number of modalities for each ord variable
+    lambda_ord_old (list of nb_ord_j x (nj_ord + r1) elements): The ordinal coefficients
+                                                        of the previous iteration
+    ps_y ((numobs, S) nd-array): p(s | y) for all s in Omega
+    pzl1_ys (nd-array): p(z1 | y, s)
+    zl1_s ((M1, r1, s1) nd-array): z1 | s 
+    AT ((r1 x r1) nd-array): Var(z1)^{-1/2}
+    tol (int): Control when to stop the optimisation process
+    maxstep (int): The maximum number of optimization step.
+    ----------------------------------------------------------------------
+    returns (list of nb_ord_j x (nj_ord + r1) elements): The new ordinal coefficients
+    '''
     #****************************
     # Ordinal link parameters
     #****************************  

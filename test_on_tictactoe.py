@@ -182,10 +182,9 @@ r = np.array([5, 4, 3])
 numobs = len(y)
 k = [4, n_clusters]
 eps = 1E-05
-it = 30
+it = 2
 maxstep = 100
 seed = None
-
 
 # First fing the best architecture 
 prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
@@ -195,7 +194,7 @@ r = out['best_r']
 numobs = len(y)
 k = out['best_k']
 
-
+it = 30
 nb_trials= 30
 ddgmm_res = pd.DataFrame(columns = ['it_id', 'micro', 'macro', 'silhouette'])
 

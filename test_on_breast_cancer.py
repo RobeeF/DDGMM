@@ -140,6 +140,7 @@ m, pred = misc(labels_oh, prince_init['classes'], True)
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
+
 out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it,\
             eps, maxstep, seed, perform_selec = True)
 m, pred = misc(labels_oh, out['classes'], True) 

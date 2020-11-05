@@ -45,6 +45,11 @@ mush = mush.infer_objects()
 
 y = mush.iloc[:,1:]
 
+# Keep only the variables that have at least 2 modalities
+one_modality_vars = np.array([len(set(y[col])) == 1 for col in y.columns])
+y = y.iloc[:, ~one_modality_vars]
+
+# Encode the outcome
 le = LabelEncoder()
 labels = mush.iloc[:,0]
 labels_oh = le.fit_transform(labels)
@@ -62,16 +67,18 @@ n_clusters = len(np.unique(labels_oh))
 #===========================================#
 
 var_distrib = np.array(['categorical', 'categorical', 'categorical', 'bernoulli', 'categorical',\
-                        'categorical', 'categorical', 'bernoulli', 'categorical', 'categorical',\
+                        'bernoulli', 'ordinal', 'ordinal', 'categorical', 'bernoulli',\
                         'categorical', 'categorical', 'categorical', 'categorical', 'categorical', \
-                        'categorical', 'categorical', 'ordinal', 'categorical', 'categorical', \
-                        'categorical', 'categorical'])
-
+                        'bernoulli', 'ordinal', 'categorical', 'categorical', \
+                        'ordinal', 'categorical'])
+    
 ord_idx = np.where(var_distrib == 'ordinal')[0]
 
 # Extract labels for each y_j and then perform dirty manual reordering
 all_labels = [np.unique(y.iloc[:,idx]) for idx in ord_idx]
+all_labels[1] = np.array(['n', 'b'])
 all_codes = [list(range(len(lab))) for lab in all_labels]    
+
 
 # Encode ordinal data
 for i, idx in enumerate(ord_idx):
@@ -90,7 +97,6 @@ le = LabelEncoder()
 for col_idx, colname in enumerate(y.columns):
     if var_distrib[col_idx] == 'categorical': 
         y[colname] = le.fit_transform(y[colname])
-
 #################################################
 
 # Encode binary data
@@ -114,7 +120,7 @@ y_nenc_typed = y_categ_non_enc.astype(np.object)
 y_np_nenc = y_nenc_typed.values
 
 # Defining distances over the non encoded features
-dm = gower_matrix(y_nenc_typed, cat_features = cf_non_enc) 
+#dm = gower_matrix(y_nenc_typed, cat_features = cf_non_enc) 
 
 dtype = {y.columns[j]: np.float64 if (var_distrib[j] != 'bernoulli') and \
         (var_distrib[j] != 'categorical') else np.str for j in range(p_new)}
@@ -139,6 +145,14 @@ maxstep = 100
 
 # Prince init
 prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
+
+
+'''
+init = prince_init
+seed = None
+y = y_np
+'''
+
 out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it, eps, maxstep, seed)
 m, pred = misc(labels_oh, out['classes'], True) 
 print(m)

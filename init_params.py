@@ -149,7 +149,6 @@ def dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, use_famd = False, seed
         mca = prince.MCA(n_components = r[0], n_iter=3, copy=True,\
                          check_input=False, engine='auto', random_state = seed)
         z1 = mca.fit_transform(y).values
-        #z1 = mca.row_coordinates(y).values.astype(float)
         
     z = [z1]
     y = y.values.astype(int)
@@ -275,7 +274,7 @@ def dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, use_famd = False, seed
     for j in range(nb_categ):
         yj = y_categ[:,j]
         
-        lr = LogisticRegression(multi_class = 'multinomial')
+        lr = LogisticRegression(multi_class = 'multinomial', max_iter = 2000)
         lr.fit(z[0], yj)        
 
         ## Identifiability of categ coefficients

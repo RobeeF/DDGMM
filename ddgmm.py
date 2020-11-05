@@ -74,15 +74,15 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         
     # Dispatch variables between categories
     y_bin = y[:, np.logical_or(var_distrib == 'bernoulli',var_distrib == 'binomial')]
-    nj_bin = nj[np.logical_or(var_distrib == 'bernoulli',var_distrib == 'binomial')]
+    nj_bin = nj[np.logical_or(var_distrib == 'bernoulli',var_distrib == 'binomial')].astype(int)
     nb_bin = len(nj_bin)
         
     y_categ = y[:, var_distrib == 'categorical']
-    nj_categ = nj[var_distrib == 'categorical']
+    nj_categ = nj[var_distrib == 'categorical'].astype(int)
     nb_categ = len(nj_categ)    
 
     y_ord = y[:, var_distrib == 'ordinal']    
-    nj_ord = nj[var_distrib == 'ordinal']
+    nj_ord = nj[var_distrib == 'ordinal'].astype(int)
     nb_ord = len(nj_ord)
     
     L = len(k)

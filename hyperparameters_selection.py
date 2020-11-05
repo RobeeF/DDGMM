@@ -15,8 +15,7 @@ def M_growth(it_nb, r, numobs):
     ---------------------------------------------------------------------
     returns (1d-array of int): The number of MC points to sample on each layer
     '''
-    return (5 * np.array(r)).astype(int)
-    #return ((40 / np.log(numobs)) * it_nb * np.sqrt(np.array(r))).astype(int)
+    return ((40 / np.log(numobs)) * it_nb * np.sqrt(np.array(r))).astype(int)
 
     
 def look_for_simpler_network(it_num):

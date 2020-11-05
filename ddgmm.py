@@ -17,7 +17,7 @@ from MCEM_DGMM import draw_z_s, fz2_z1s, draw_z2_z1s, fz_ys,\
     E_step_DGMM, M_step_DGMM
 
 from MCEM_GLLVM import draw_zl1_ys, fy_zl1, E_step_GLLVM, \
-        bin_params_GLLVM, ord_params_GLLVM
+        bin_params_GLLVM, ord_params_GLLVM, categ_params_GLLVM
   
 from hyperparameters_selection import M_growth, look_for_simpler_network
 from utilities import compute_path_params, compute_chsi, compute_rho
@@ -61,6 +61,8 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
     psi = deepcopy(init['psi'])
     lambda_bin = deepcopy(init['lambda_bin'])
     lambda_ord = deepcopy(init['lambda_ord'])
+    lambda_categ = deepcopy(init['lambda_categ'])
+
     H = deepcopy(init['H'])
     w_s = deepcopy(init['w_s']) # Probability of path s' through the network for all s' in Omega
    
@@ -75,6 +77,10 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
     nj_bin = nj[np.logical_or(var_distrib == 'bernoulli',var_distrib == 'binomial')]
     nb_bin = len(nj_bin)
         
+    y_categ = y[:, var_distrib == 'categorical']
+    nj_categ = nj[var_distrib == 'categorical']
+    nb_categ = len(nj_categ)    
+
     y_ord = y[:, var_distrib == 'ordinal']    
     nj_ord = nj[var_distrib == 'ordinal']
     nb_ord = len(nj_ord)
@@ -84,7 +90,7 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
     S = np.array([np.prod(k_aug[l:]) for l in range(L + 1)])    
     M = M_growth(1, r, numobs)
    
-    assert nb_ord + nb_bin > 0 
+    assert nb_ord + nb_bin + nb_categ > 0 
                      
     while (it_num < it) & ((ratio > eps) | (patience <= max_patience)):
         print(it_num)
@@ -120,7 +126,8 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         # Compute the p(y| z1) for all variable categories
         #=======================================================================
         
-        py_zl1 = fy_zl1(lambda_bin, y_bin, nj_bin, lambda_ord, y_ord, nj_ord, z_s[0])
+        py_zl1 = fy_zl1(lambda_bin, y_bin, nj_bin, lambda_ord, y_ord, nj_ord, 
+                        lambda_categ, y_categ, nj_categ, z_s[0])
         
         #========================================================================
         # Draw from p(z1 | y, s) proportional to p(y | z1) * p(z1 | s) for all s
@@ -194,6 +201,9 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
                  
         lambda_ord = ord_params_GLLVM(y_ord, nj_ord, lambda_ord, ps_y, pzl1_ys, z_s[0], AT,\
                      tol = tol, maxstep = maxstep)
+            
+        lambda_categ = categ_params_GLLVM(y_categ, nj_categ, lambda_categ, ps_y, pzl1_ys, z_s[0], AT,\
+                     tol = tol, maxstep = maxstep)
 
         ###########################################################################
         ################## Clustering parameters updating #########################
@@ -239,7 +249,7 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
 
         
         if look_for_simpler_network(it_num) & perform_selec & is_not_min_specif:
-            r_to_keep = r_select(y_bin, y_ord, zl1_ys, z2_z1s, w_s)
+            r_to_keep = r_select(y_bin, y_ord, y_categ, zl1_ys, z2_z1s, w_s)
             
             # If r_l == 0, delete the last l + 1: layers
             new_L = np.sum([len(rl) != 0 for rl in r_to_keep]) - 1 
@@ -279,7 +289,14 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
                     Lambda_ord_var = Lambda_ord_var[:, r_to_keep[0]]
                     lambda_ord = [np.concatenate([lambda_ord_intercept[j], Lambda_ord_var[j]])\
                                   for j in range(nb_ord)]
-    
+                        
+                if nb_categ > 0:
+                    lambda_categ_intercept = [lambda_categ[j][:, 0]  for j in range(nb_categ)]
+                    Lambda_categ_var = np.stack([lambda_categ_j[:,-r[0]:] for lambda_categ_j in lambda_categ])
+                    Lambda_categ_var = Lambda_categ_var[:, :, r_to_keep[0]]
+                    lambda_categ = [np.hstack([lambda_categ_intercept[j][..., n_axis], Lambda_categ_var[j]])\
+                                   for j in range(nb_categ)]                    
+                    
                 w = w_s.reshape(*k, order = 'C')
                 new_k_idx_grid = np.ix_(*k_to_keep[:new_L])
                 

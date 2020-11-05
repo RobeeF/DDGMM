@@ -13,6 +13,7 @@ from ddgmm import DDGMM
 from gower import gower_matrix
 from init_params import dim_reduce_init
 from metrics import misc
+from sklearn.metrics import confusion_matrix
 from data_preprocessing import gen_categ_as_bin_dataset, compute_nj
         
 import pandas as pd
@@ -55,9 +56,20 @@ y_categ_non_enc = deepcopy(y)
 vd_categ_non_enc = deepcopy(var_distrib)
 
 # Encode categorical datas
-y, var_distrib = gen_categ_as_bin_dataset(y, var_distrib)
+#y, var_distrib = gen_categ_as_bin_dataset(y, var_distrib)
 
-nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
+
+#######################################################
+# Test to encode categorical variables
+le = LabelEncoder()
+for col_idx, colname in enumerate(y.columns):
+    if var_distrib[col_idx] == 'categorical': 
+        y[colname] = le.fit_transform(y[colname])
+
+#################################################
+
+
+nj, nj_bin, nj_ord, nj_categ = compute_nj(y, var_distrib)
 y_np = y.values
 
 p_new = y.shape[1]
@@ -73,15 +85,19 @@ y_np_nenc = y_nenc_typed.values
 # Defining distances over the non encoded features
 dm = gower_matrix(y_nenc_typed, cat_features = cf_non_enc) 
 
+dtype = {y.columns[j]: np.float64 if (var_distrib[j] != 'bernoulli') and \
+        (var_distrib[j] != 'categorical') else np.str for j in range(p_new)}
+
+y = y.astype(dtype, copy=True)
 
 #===========================================#
 # Running the algorithm
 #===========================================# 
 
 # Launching the algorithm
-r = np.array([3, 2, 1])
+r = np.array([2, 1])
 numobs = len(y)
-k = [n_clusters, 2]
+k = [n_clusters]
 
 seed = 1
 init_seed = 2
@@ -96,6 +112,13 @@ prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
 m, pred = misc(labels_oh, prince_init['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
+
+
+'''
+y = y_np
+seed = None
+init = prince_init
+'''
 
 out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it, eps,\
             maxstep, seed, perform_selec = False)
@@ -202,7 +225,7 @@ for i in range(nb_trials):
 ddgmm_res.mean()
 ddgmm_res.std()
 
-ddgmm_res.to_csv(res_folder + '/ddgmm_res.csv')
+ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded.csv')
 
 
 #=======================================================================
@@ -223,7 +246,12 @@ res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/tictactoe'
 # <nb_trials> tries for each specification
 nb_trials = 30
 
-
+# Scale the continuous variables
+# Please check the categorical variable have not been encoded into dummy
+ss = StandardScaler()
+y_scale = y_np.astype(float)
+y_scale[:, vd_categ_non_enc == 'continuous'] = ss.fit_transform(y_scale[:,\
+                                                                    vd_categ_non_enc == 'continuous'])
 
 #****************************
 # Partitional algorithm
@@ -360,8 +388,8 @@ som_res.to_csv(res_folder + '/som_res.csv')
 # Other algorithms family
 #****************************
 
-ss = StandardScaler()
-y_scale = ss.fit_transform(y_np)
+#ss = StandardScaler()
+#y_scale = ss.fit_transform(y_np)
 
 dbs_res = pd.DataFrame(columns = ['it_id', 'data' ,'leaf_size', 'eps',\
                                   'min_samples','micro', 'macro', 'silhouette'])
@@ -376,12 +404,12 @@ for lfs in lf_size:
     for eps in epss:
         for min_s in min_ss:
             for data in data_to_fit:
-                for i in range(1):
+                for i in range(nb_trials):
                     if data == 'gower':
                         dbs = DBSCAN(eps = eps, min_samples = min_s, \
                                      metric = 'precomputed', leaf_size = lfs).fit(dm)
                     else:
-                        dbs = DBSCAN(eps = eps, min_samples = min_s, leaf_size = lfs).fit(y_scale)
+                        dbs = DBSCAN(eps = eps, min_samples = min_s, leaf_size = lfs).fit(y_np)
                         
                     dbs_preds = dbs.labels_
                     

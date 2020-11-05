@@ -58,7 +58,7 @@ p = y.shape[1]
 # Formating the data
 #===========================================#
 var_distrib = np.array(['ordinal', 'ordinal', 'ordinal', 'ordinal', \
-                        'bernoulli', 'ordinal', 'categorical',
+                        'bernoulli', 'ordinal', 'bernoulli',
                         'categorical', 'bernoulli'])
     
 ord_idx = np.where(var_distrib == 'ordinal')[0]
@@ -75,19 +75,29 @@ for i, idx in enumerate(ord_idx):
 y_categ_non_enc = deepcopy(y)
 vd_categ_non_enc = deepcopy(var_distrib)
 
+
 # Encode categorical datas
-y, var_distrib = gen_categ_as_bin_dataset(y, var_distrib)
+#y, var_distrib = gen_categ_as_bin_dataset(y, var_distrib)
 
 # Encode binary data
 le = LabelEncoder()
 for col_idx, colname in enumerate(y.columns):
     if var_distrib[col_idx] == 'bernoulli': 
         y[colname] = le.fit_transform(y[colname])
+
+#######################################################
+# Test to encode categorical variables
+le = LabelEncoder()
+for col_idx, colname in enumerate(y.columns):
+    if var_distrib[col_idx] == 'categorical': 
+        y[colname] = le.fit_transform(y[colname])
+
+#################################################
     
 enc = OneHotEncoder(sparse = False, drop = 'first')
 labels_oh = enc.fit_transform(np.array(labels).reshape(-1,1)).flatten()
 
-nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
+nj, nj_bin, nj_ord, nj_categ = compute_nj(y, var_distrib)
 y_np = y.values
 
 p_new = y.shape[1]
@@ -103,14 +113,19 @@ y_np_nenc = y_nenc_typed.values
 # Defining distances over the non encoded features
 dm = gower_matrix(y_nenc_typed, cat_features = cf_non_enc) 
 
+dtype = {y.columns[j]: np.float64 if (var_distrib[j] != 'bernoulli') and \
+        (var_distrib[j] != 'categorical') else np.str for j in range(p_new)}
+
+y = y.astype(dtype, copy=True)
+
 
 #===========================================#
 # Running the algorithm
 #===========================================# 
 
-r = [3, 2, 1]
+r = [3, 1]
 numobs = len(y)
-k = [n_clusters, 2]
+k = [n_clusters]
 
 seed = 1
 init_seed = 2
@@ -126,7 +141,7 @@ print(m)
 print(confusion_matrix(labels_oh, pred))
 
 out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it,\
-            eps, maxstep, seed, perform_selec = False)
+            eps, maxstep, seed, perform_selec = True)
 m, pred = misc(labels_oh, out['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
@@ -247,7 +262,7 @@ for i in range(nb_trials):
 ddgmm_res.mean()
 ddgmm_res.std()
 
-ddgmm_res.to_csv(res_folder + '/ddgmm_res.csv')
+ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded.csv')
 
 
 #=======================================================================

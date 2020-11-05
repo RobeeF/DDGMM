@@ -82,7 +82,16 @@ y_categ_non_enc = deepcopy(y)
 vd_categ_non_enc = deepcopy(var_distrib)
 
 # Encode categorical datas
-y, var_distrib = gen_categ_as_bin_dataset(y, var_distrib)
+#y, var_distrib = gen_categ_as_bin_dataset(y, var_distrib)
+
+#######################################################
+# Test to encode categorical variables
+le = LabelEncoder()
+for col_idx, colname in enumerate(y.columns):
+    if var_distrib[col_idx] == 'categorical': 
+        y[colname] = le.fit_transform(y[colname])
+
+#################################################
 
 # Encode binary data
 le = LabelEncoder()
@@ -90,7 +99,7 @@ for col_idx, colname in enumerate(y.columns):
     if var_distrib[col_idx] == 'bernoulli': # Attention
         y[colname] = le.fit_transform(y[colname])
 
-nj, nj_bin, nj_ord = compute_nj(y, var_distrib)
+nj, nj_bin, nj_ord, nj_categ = compute_nj(y, var_distrib)
 y_np = y.values
 
 
@@ -106,6 +115,11 @@ y_np_nenc = y_nenc_typed.values
 
 # Defining distances over the non encoded features
 dm = gower_matrix(y_nenc_typed, cat_features = cf_non_enc) 
+
+dtype = {y.columns[j]: np.float64 if (var_distrib[j] != 'bernoulli') and \
+        (var_distrib[j] != 'categorical') else np.str for j in range(p_new)}
+
+y = y.astype(dtype, copy=True)
 
 
 #===========================================#
@@ -242,7 +256,6 @@ res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/mushrooms'
 nb_trials = 30
 
 
-
 #****************************
 # Partitional algorithm
 #****************************
@@ -372,9 +385,6 @@ som_res.to_csv(res_folder + '/som_res.csv')
 # Other algorithms family
 #****************************
 
-ss = StandardScaler()
-y_scale = ss.fit_transform(y_np)
-
 dbs_res = pd.DataFrame(columns = ['it_id', 'data' ,'leaf_size', 'eps',\
                                   'min_samples','micro', 'macro', 'silhouette'])
 
@@ -388,12 +398,12 @@ for lfs in lf_size:
     for eps in epss:
         for min_s in min_ss:
             for data in data_to_fit:
-                for i in range(1):
+                for i in range(nb_trials):
                     if data == 'gower':
                         dbs = DBSCAN(eps = eps, min_samples = min_s, \
                                      metric = 'precomputed', leaf_size = lfs).fit(dm)
                     else:
-                        dbs = DBSCAN(eps = eps, min_samples = min_s, leaf_size = lfs).fit(y_scale)
+                        dbs = DBSCAN(eps = eps, min_samples = min_s, leaf_size = lfs).fit(y_np)
                         
                     dbs_preds = dbs.labels_
                     
@@ -419,9 +429,11 @@ for lfs in lf_size:
 # scaled data eps = 3.7525 and min_samples = 4  is the best spe
 mean_res = dbs_res.groupby(['data','leaf_size', 'eps', 'min_samples']).mean()
 maxs = mean_res.max()
+print(maxs)
 
 mean_res[mean_res['micro'] == maxs['micro']].std()
 mean_res[mean_res['macro'] == maxs['macro']].std()
 mean_res[mean_res['silhouette'] == maxs['silhouette']].std()
 
-dbs_res.to_csv(res_folder + '/dbs_res.csv')
+dbs_res.to_csv(res_folder + '/dbs_res_not_scaled.csv')
+dbs_res = pd.read_csv(res_folder + '/dbs_res_not_scaled.csv')

@@ -292,8 +292,9 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
                         
                 if nb_categ > 0:
                     lambda_categ_intercept = [lambda_categ[j][:, 0]  for j in range(nb_categ)]
-                    Lambda_categ_var = np.stack([lambda_categ_j[:,-r[0]:] for lambda_categ_j in lambda_categ])
-                    Lambda_categ_var = Lambda_categ_var[:, :, r_to_keep[0]]
+                    Lambda_categ_var = [lambda_categ_j[:,-r[0]:] for lambda_categ_j in lambda_categ]
+                    Lambda_categ_var = [lambda_categ_j[:, r_to_keep[0]] for lambda_categ_j in lambda_categ]
+
                     lambda_categ = [np.hstack([lambda_categ_intercept[j][..., n_axis], Lambda_categ_var[j]])\
                                    for j in range(nb_categ)]                    
                     

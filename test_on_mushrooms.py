@@ -67,7 +67,7 @@ n_clusters = len(np.unique(labels_oh))
 #===========================================#
 
 var_distrib = np.array(['categorical', 'categorical', 'categorical', 'bernoulli', 'categorical',\
-                        'bernoulli', 'ordinal', 'ordinal', 'categorical', 'bernoulli',\
+                        'bernoulli', 'bernoulli', 'bernoulli', 'categorical', 'bernoulli',\
                         'categorical', 'categorical', 'categorical', 'categorical', 'categorical', \
                         'bernoulli', 'ordinal', 'categorical', 'categorical', \
                         'ordinal', 'categorical'])
@@ -76,7 +76,6 @@ ord_idx = np.where(var_distrib == 'ordinal')[0]
 
 # Extract labels for each y_j and then perform dirty manual reordering
 all_labels = [np.unique(y.iloc[:,idx]) for idx in ord_idx]
-all_labels[1] = np.array(['n', 'b'])
 all_codes = [list(range(len(lab))) for lab in all_labels]    
 
 
@@ -146,12 +145,6 @@ maxstep = 100
 # Prince init
 prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
 
-
-'''
-init = prince_init
-seed = None
-y = y_np
-'''
 
 out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it, eps, maxstep, seed)
 m, pred = misc(labels_oh, out['classes'], True) 

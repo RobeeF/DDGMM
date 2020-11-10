@@ -154,7 +154,7 @@ k = [n_clusters]
 nb_trials= 30
 mca_res = pd.DataFrame(columns = ['it_id', 'r', 'micro', 'macro', 'silhouette'])
 
-for r1 in range(2, 9):
+for r1 in range(2, 6):
     print(r1)
     r = np.array([r1, 1])
     for i in range(nb_trials):
@@ -245,13 +245,6 @@ res_folder = 'C:/Users/rfuchs/Documents/These/Experiences/mixed_algos/tictactoe'
 # <nb_trials> tries for each specification
 nb_trials = 30
 
-# Scale the continuous variables
-# Please check the categorical variable have not been encoded into dummy
-ss = StandardScaler()
-y_scale = y_np.astype(float)
-y_scale[:, vd_categ_non_enc == 'continuous'] = ss.fit_transform(y_scale[:,\
-                                                                    vd_categ_non_enc == 'continuous'])
-
 #****************************
 # Partitional algorithm
 #****************************
@@ -278,7 +271,7 @@ for init in inits:
 # Cao best spe
 #part_res_modes = pd.read_csv(res_folder + '/part_res_modes.csv')
 
-part_res_modes.groupby('init').mean() 
+part_res_modes.groupby('init').mean().max()
 part_res_modes.groupby('init').std() 
 
 part_res_modes.to_csv(res_folder + '/part_res_modes.csv')
@@ -307,7 +300,7 @@ for init in inits:
                                                ignore_index=True)
 
 # Random is best
-part_res_proto.groupby('init').mean()
+part_res_proto.groupby('init').mean().max()
 part_res_proto.groupby('init').std()
 
 part_res_proto.to_csv(res_folder + '/part_res_proto.csv')
@@ -337,7 +330,7 @@ for linky in linkages:
 
 #hierarch_res = pd.read_csv(res_folder + '/hierarch_res.csv')
 
-hierarch_res.groupby('linkage').mean()
+hierarch_res.groupby('linkage').mean().max()
 hierarch_res.groupby('linkage').std()
 
 hierarch_res.to_csv(res_folder + '/hierarch_res.csv')
@@ -376,10 +369,13 @@ for sig in sigmas:
    
 #som_res = pd.read_csv(res_folder + '/som_res.csv')
 
-som_res.groupby(['sigma', 'lr']).mean()
-som_res.groupby(['sigma', 'lr']).mean().max()
+mean_res = som_res.groupby(['sigma', 'lr']).mean()
+maxs = mean_res.max()
 
-som_res.groupby(['sigma', 'lr']).std()
+som_res.set_index(['sigma', 'lr'])[mean_res['micro'] == maxs['micro']].std()
+som_res.set_index(['sigma', 'lr'])[mean_res['macro'] == maxs['macro']].std()
+som_res.set_index(['sigma', 'lr'])[mean_res['silhouette'] == maxs['silhouette']].std()
+
 som_res.to_csv(res_folder + '/som_res.csv')
 
 
@@ -437,8 +433,9 @@ for lfs in lf_size:
 mean_res = dbs_res.groupby(['data','leaf_size', 'eps', 'min_samples']).mean()
 maxs = mean_res.max()
 
-mean_res[mean_res['micro'] == maxs['micro']].std()
-mean_res[mean_res['macro'] == maxs['macro']].std()
-mean_res[mean_res['silhouette'] == maxs['silhouette']].std()
+dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['micro'] == maxs['micro']].std()
+dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['macro'] == maxs['macro']].std()
+dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['silhouette'] == maxs['silhouette']].std()
+
 
 dbs_res.to_csv(res_folder + '/dbs_res.csv')

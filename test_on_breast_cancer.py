@@ -194,7 +194,7 @@ k = [n_clusters]
 nb_trials= 30
 mca_res = pd.DataFrame(columns = ['it_id', 'r', 'micro', 'macro', 'silhouette'])
 
-for r1 in range(2, 9):
+for r1 in range(2, 6):
     print(r1)
     r = np.array([r1, 1])
     for i in range(nb_trials):
@@ -310,10 +310,10 @@ for init in inits:
                                                ignore_index=True)
             
 # Cao best spe
-part_res_modes.groupby('init').mean() 
+part_res_modes.groupby('init').mean().max()
 part_res_modes.groupby('init').std() 
 
-part_res_modes.to_csv(res_folder + '/part_res_modes.csv')
+part_res_modes.to_csv(res_folder + '/part_res_modes_categ_encoded.csv')
 
 #****************************
 # K prototypes
@@ -338,10 +338,10 @@ for init in inits:
                                                ignore_index=True)
 
 # Random is best
-part_res_proto.groupby('init').mean()
+part_res_proto.groupby('init').mean().max()
 part_res_proto.groupby('init').std()
 
-part_res_proto.to_csv(res_folder + '/part_res_proto.csv')
+part_res_proto.to_csv(res_folder + '/part_res_proto_categ_encoded.csv')
 
 #****************************
 # Hierarchical clustering
@@ -367,7 +367,7 @@ for linky in linkages:
                                            ignore_index=True)
 
  
-hierarch_res.groupby('linkage').mean()
+hierarch_res.groupby('linkage').mean().max()
 hierarch_res.groupby('linkage').std()
 
 hierarch_res.to_csv(res_folder + '/hierarch_res.csv')
@@ -404,19 +404,19 @@ for sig in sigmas:
                             'micro': micro, 'macro': macro, 'silhouette': sil},\
                                      ignore_index=True)
    
-som_res.groupby(['sigma', 'lr']).mean()
-som_res.groupby(['sigma', 'lr']).mean().max()
+mean_res = som_res.groupby(['sigma', 'lr']).mean()
+maxs = mean_res.max()
 
-som_res.groupby(['sigma', 'lr']).std()
+som_res.set_index(['sigma', 'lr'])[mean_res['micro'] == maxs['micro']].std()
+som_res.set_index(['sigma', 'lr'])[mean_res['macro'] == maxs['macro']].std()
+som_res.set_index(['sigma', 'lr'])[mean_res['silhouette'] == maxs['silhouette']].std()
+
 som_res.to_csv(res_folder + '/som_res.csv')
 
 
 #****************************
 # Other algorithms family
 #****************************
-
-ss = StandardScaler()
-y_scale = ss.fit_transform(y_np)
 
 dbs_res = pd.DataFrame(columns = ['it_id', 'data' ,'leaf_size', 'eps',\
                                   'min_samples','micro', 'macro', 'silhouette'])
@@ -431,12 +431,12 @@ for lfs in lf_size:
     for eps in epss:
         for min_s in min_ss:
             for data in data_to_fit:
-                for i in range(1):
+                for i in range(nb_trials):
                     if data == 'gower':
                         dbs = DBSCAN(eps = eps, min_samples = min_s, \
                                      metric = 'precomputed', leaf_size = lfs).fit(dm)
                     else:
-                        dbs = DBSCAN(eps = eps, min_samples = min_s, leaf_size = lfs).fit(y_scale)
+                        dbs = DBSCAN(eps = eps, min_samples = min_s, leaf_size = lfs).fit(y_np)
                         
                     dbs_preds = dbs.labels_
                     
@@ -463,8 +463,10 @@ for lfs in lf_size:
 mean_res = dbs_res.groupby(['data','leaf_size', 'eps', 'min_samples']).mean()
 maxs = mean_res.max()
 
-mean_res[mean_res['micro'] == maxs['micro']].std()
-mean_res[mean_res['macro'] == maxs['macro']].std()
-mean_res[mean_res['silhouette'] == maxs['silhouette']].std()
+dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['micro'] == maxs['micro']].std()
+dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['macro'] == maxs['macro']].std()
+dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['silhouette'] == maxs['silhouette']].std()
+
+
 
 dbs_res.to_csv(res_folder + '/dbs_res.csv')

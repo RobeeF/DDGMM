@@ -119,7 +119,7 @@ y_nenc_typed = y_categ_non_enc.astype(np.object)
 y_np_nenc = y_nenc_typed.values
 
 # Defining distances over the non encoded features
-#dm = gower_matrix(y_nenc_typed, cat_features = cf_non_enc) 
+dm = gower_matrix(y_nenc_typed, cat_features = cf_non_enc) 
 
 dtype = {y.columns[j]: np.float64 if (var_distrib[j] != 'bernoulli') and \
         (var_distrib[j] != 'categorical') else np.str for j in range(p_new)}
@@ -139,7 +139,7 @@ seed = 1
 init_seed = 2
     
 eps = 1E-05
-it = 10
+it = 30
 maxstep = 100
 
 # Prince init
@@ -236,12 +236,17 @@ for i in range(nb_trials):
         ddgmm_res = ddgmm_res.append({'it_id': i + 1, 'micro': np.nan, 'macro': np.nan, \
                                     'silhouette': np.nan}, ignore_index=True)
 
+    print(sil)
+    print(micro)
+    print(macro)
+    ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded_msi.csv')
 
 
 ddgmm_res.mean()
 ddgmm_res.std()
 
 ddgmm_res.to_csv(res_folder + '/ddgmm_res.csv')
+ddgmm_res = pd.read_csv(res_folder + '/ddgmm_res_categ_encoded.csv')
 
 
 #=======================================================================
@@ -287,10 +292,10 @@ for init in inits:
                                                ignore_index=True)
             
 # Cao best spe
-part_res_modes.groupby('init').mean() 
+part_res_modes.groupby('init').mean().max()
 part_res_modes.groupby('init').std() 
 
-part_res_modes.to_csv(res_folder + '/part_res_modes.csv')
+part_res_modes.to_csv(res_folder + '/part_res_modes_categ_encoded.csv')
 
 #****************************
 # K prototypes
@@ -315,10 +320,10 @@ for init in inits:
                                                ignore_index=True)
 
 # Random is best
-part_res_proto.groupby('init').mean()
+part_res_proto.groupby('init').mean().max()
 part_res_proto.groupby('init').std()
 
-part_res_proto.to_csv(res_folder + '/part_res_proto.csv')
+part_res_proto.to_csv(res_folder + '/part_res_proto_categ_encoded.csv')
 
 #****************************
 # Hierarchical clustering
@@ -347,7 +352,7 @@ for linky in linkages:
 hierarch_res.groupby('linkage').mean()
 hierarch_res.groupby('linkage').std()
 
-hierarch_res.to_csv(res_folder + '/hierarch_res.csv')
+hierarch_res.to_csv(res_folder + '/hierarch_res_categ_encoded.csv')
 
 #****************************
 # Neural-network based
@@ -385,7 +390,7 @@ som_res.groupby(['sigma', 'lr']).mean()
 som_res.groupby(['sigma', 'lr']).mean().max()
 
 som_res.groupby(['sigma', 'lr']).std()
-som_res.to_csv(res_folder + '/som_res.csv')
+som_res.to_csv(res_folder + '/som_res_categ_encoded.csv')
 
 
 #****************************
@@ -442,5 +447,5 @@ mean_res[mean_res['micro'] == maxs['micro']].std()
 mean_res[mean_res['macro'] == maxs['macro']].std()
 mean_res[mean_res['silhouette'] == maxs['silhouette']].std()
 
-dbs_res.to_csv(res_folder + '/dbs_res_not_scaled.csv')
-dbs_res = pd.read_csv(res_folder + '/dbs_res_not_scaled.csv')
+dbs_res.to_csv(res_folder + '/dbs_res_categ_encoded.csv')
+#dbs_res = pd.read_csv(res_folder + '/dbs_res_not_scaled.csv')

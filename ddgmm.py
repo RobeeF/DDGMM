@@ -26,6 +26,8 @@ import autograd.numpy as np
 from autograd.numpy import transpose as t
 from autograd.numpy import newaxis as n_axis
 
+from gower import gower_matrix
+from sklearn.metrics import silhouette_score
 
 def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
           eps = 1E-05, maxstep = 100, seed = None, perform_selec = True): 
@@ -55,6 +57,12 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
     tol = 0.01
     max_patience = 1
     patience = 0
+    
+    best_k = deepcopy(k)
+    best_r = deepcopy(r)
+    
+    best_sil = -1 
+    new_sil = -1 
     
     # Initialize the parameters
     eta = deepcopy(init['eta'])
@@ -91,6 +99,10 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
     M = M_growth(1, r, numobs)
    
     assert nb_ord + nb_bin + nb_categ > 0 
+
+    # Compute the Gower matrix
+    categ_mask = np.logical_or(var_distrib == 'categorical', var_distrib == 'bernoulli')
+    dm = gower_matrix(y.astype(object), cat_features = categ_mask) 
                      
     while (it_num < it) & ((ratio > eps) | (patience <= max_patience)):
         print(it_num)
@@ -214,26 +226,39 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         ratio = (new_lik - prev_lik)/abs(prev_lik)
         print(likelihood)
 
+
+        idx_to_sum = tuple(set(range(1, L + 1)) - set([clustering_layer + 1]))
+        psl_y = ps_y.reshape(numobs, *k, order = 'C').sum(idx_to_sum) 
+
+        temp_class = np.argmax(psl_y, axis = 1)
+        try:
+            new_sil = silhouette_score(dm, temp_class, metric = 'precomputed')
+        except ValueError:
+            new_sil = -1
+            
+        if best_sil < new_sil:
+            z = (ps_y[..., n_axis] * Ez_ys[clustering_layer]).sum(1)
+            best_sil = deepcopy(new_sil)
+            classes = deepcopy(temp_class)
+
+
+
         # Refresh the classes only if they provide a better explanation of the data
         if best_lik < new_lik:
             best_lik = deepcopy(prev_lik)
             
-            idx_to_sum = tuple(set(range(1, L + 1)) - set([clustering_layer + 1]))
-            psl_y = ps_y.reshape(numobs, *k, order = 'C').sum(idx_to_sum) 
+            #idx_to_sum = tuple(set(range(1, L + 1)) - set([clustering_layer + 1]))
+            #psl_y = ps_y.reshape(numobs, *k, order = 'C').sum(idx_to_sum) 
 
-            classes = np.argmax(psl_y, axis = 1) 
+            #classes = np.argmax(psl_y, axis = 1) 
             
-            z = (ps_y[..., n_axis] * Ez_ys[clustering_layer]).sum(1)
+            #z = (ps_y[..., n_axis] * Ez_ys[clustering_layer]).sum(1)
             
             '''
             fig = plt.figure(figsize=(8,8))
             plt.scatter(z[:, 0], z[:, 1])
             plt.show()
             '''
-            
-            best_r = deepcopy(r)
-            best_k = deepcopy(k)
-
         
         if prev_lik < new_lik:
             patience = 0
@@ -318,7 +343,8 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
                 L = new_L
                 
                 patience = 0
-            
+                best_r = deepcopy(r)
+                best_k = deepcopy(k)
             
             print('New architecture:')
             print('k', k)

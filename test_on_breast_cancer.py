@@ -220,7 +220,7 @@ r = np.array([5, 4, 3])
 numobs = len(y)
 k = [4, n_clusters]
 eps = 1E-05
-it = 2
+it = 3
 maxstep = 100
 seed = None
 

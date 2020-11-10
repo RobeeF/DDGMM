@@ -182,7 +182,7 @@ r = np.array([5, 4, 3])
 numobs = len(y)
 k = [4, n_clusters]
 eps = 1E-05
-it = 2
+it = 3
 maxstep = 100
 seed = None
 
@@ -224,7 +224,7 @@ for i in range(nb_trials):
 ddgmm_res.mean()
 ddgmm_res.std()
 
-ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded.csv')
+ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded_best_sil.csv')
 
 
 #=======================================================================

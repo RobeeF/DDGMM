@@ -101,9 +101,9 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
     assert nb_ord + nb_bin + nb_categ > 0 
 
     # Compute the Gower matrix
-    categ_mask = np.logical_or(var_distrib == 'categorical', var_distrib == 'bernoulli')
-    dm = gower_matrix(y.astype(object), cat_features = categ_mask) 
-                     
+    cat_features = np.logical_or(var_distrib == 'categorical', var_distrib == 'bernoulli')
+    dm = gower_matrix(y, cat_features = cat_features)
+                       
     while (it_num < it) & ((ratio > eps) | (patience <= max_patience)):
         print(it_num)
 
@@ -123,6 +123,11 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         sigma_s = ensure_psd(sigma_s)
         z_s, zc_s = draw_z_s(mu_s, sigma_s, eta, M)
          
+        print('mu_s',  np.abs(mu_s[0]).mean())
+        print('sigma_s',  np.abs(sigma_s[0]).mean())
+        print('z_s0',  np.abs(z_s[0]).mean())
+        print('z_s1',  np.abs(z_s[1]).mean(0)[:,0])
+        
         #========================================================================
         # Draw from f(z^{l+1} | z^{l}, s, Theta) for l >= 1
         #========================================================================
@@ -134,6 +139,7 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         # In the following z2 and z1 will denote z^{l+1} and z^{l} respectively
         z2_z1s = draw_z2_z1s(chsi, rho, M, r)
                    
+
         #=======================================================================
         # Compute the p(y| z1) for all variable categories
         #=======================================================================
@@ -172,7 +178,12 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         
         Ez_ys, E_z1z2T_ys, E_z2z2T_ys, EeeT_ys = \
             E_step_DGMM(zl1_ys, H, z_s, zc_s, z2_z1s, pz_ys, pz2_z1s, S)
-               
+
+        print('E(z1 | y, s) =', np.abs(Ez_ys[0]).mean())
+        print('E(z1z2 | y, s) =',  np.abs(E_z1z2T_ys[0]).mean())
+        print('E(z2z2 | y, s) =',  np.abs(E_z2z2T_ys[0]).mean())
+        print('E(eeT | y, s) =',  np.abs(EeeT_ys[0]).mean())   
+        
         ###########################################################################
         ############################ M step #######################################
         ###########################################################################
@@ -183,18 +194,18 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
 
         w_s = np.mean(ps_y, axis = 0)      
         eta, H, psi = M_step_DGMM(Ez_ys, E_z1z2T_ys, E_z2z2T_ys, EeeT_ys, ps_y, H, k)
-        H = diagonal_cond(H, psi)
 
         #=======================================================
         # Identifiability conditions
         #======================================================= 
         
-        # Update mu and sigma with new eta, H and Psi values
-        mu_s, sigma_s = compute_path_params(eta, H, psi)        
-        Ez1, AT = compute_z_moments(w_s, mu_s, sigma_s)
-        eta, H, psi = identifiable_estim_DGMM(eta, H, psi, Ez1, AT)
+        # Update eta, H and Psi values
+        H = diagonal_cond(H, psi)
+        Ez, AT = compute_z_moments(w_s, eta, H, psi)
+        eta, H, psi = identifiable_estim_DGMM(eta, H, psi, Ez, AT)
         
-        del(Ez1)
+        del(Ez)        
+        
         '''
         print(eta[-1].mean())
         print(H[-1].mean())
@@ -208,13 +219,13 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         # We optimize each column separately as it is faster than all column jointly 
         # (and more relevant with the independence hypothesis)
                 
-        lambda_bin = bin_params_GLLVM(y_bin, nj_bin, lambda_bin, ps_y, pzl1_ys, z_s[0], AT,\
+        lambda_bin = bin_params_GLLVM(y_bin, nj_bin, lambda_bin, ps_y, pzl1_ys, z_s[0], AT[0],\
                      tol = tol, maxstep = maxstep)
                  
-        lambda_ord = ord_params_GLLVM(y_ord, nj_ord, lambda_ord, ps_y, pzl1_ys, z_s[0], AT,\
+        lambda_ord = ord_params_GLLVM(y_ord, nj_ord, lambda_ord, ps_y, pzl1_ys, z_s[0], AT[0],\
                      tol = tol, maxstep = maxstep)
             
-        lambda_categ = categ_params_GLLVM(y_categ, nj_categ, lambda_categ, ps_y, pzl1_ys, z_s[0], AT,\
+        lambda_categ = categ_params_GLLVM(y_categ, nj_categ, lambda_categ, ps_y, pzl1_ys, z_s[0], AT[0],\
                      tol = tol, maxstep = maxstep)
 
         ###########################################################################
@@ -345,6 +356,12 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
                 patience = 0
                 best_r = deepcopy(r)
                 best_k = deepcopy(k)
+                
+                # Identifiability conditions
+                H = diagonal_cond(H, psi)
+                Ez, AT = compute_z_moments(w_s, eta, H, psi)
+                eta, H, psi = identifiable_estim_DGMM(eta, H, psi, Ez, AT)
+        
             
             print('New architecture:')
             print('k', k)

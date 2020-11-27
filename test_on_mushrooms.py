@@ -198,7 +198,7 @@ r = np.array([5, 4, 3])
 numobs = len(y)
 k = [4, n_clusters]
 eps = 1E-05
-it = 2
+it = 1
 maxstep = 100
 seed = None
 
@@ -236,10 +236,11 @@ for i in range(nb_trials):
         ddgmm_res = ddgmm_res.append({'it_id': i + 1, 'micro': np.nan, 'macro': np.nan, \
                                     'silhouette': np.nan}, ignore_index=True)
 
-    print(sil)
-    print(micro)
-    print(macro)
+    #print(sil)
+    #print(micro)
+    #print(macro)
     ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded_msi.csv')
+    print(ddgmm_res)
 
 
 ddgmm_res.mean()
@@ -443,9 +444,8 @@ mean_res = dbs_res.groupby(['data','leaf_size', 'eps', 'min_samples']).mean()
 maxs = mean_res.max()
 print(maxs)
 
-mean_res[mean_res['micro'] == maxs['micro']].std()
-mean_res[mean_res['macro'] == maxs['macro']].std()
-mean_res[mean_res['silhouette'] == maxs['silhouette']].std()
+dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['micro'] == maxs['micro']].std()
+dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['macro'] == maxs['macro']].std()
+dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['silhouette'] == maxs['silhouette']].std()
 
 dbs_res.to_csv(res_folder + '/dbs_res_categ_encoded.csv')
-#dbs_res = pd.read_csv(res_folder + '/dbs_res_not_scaled.csv')

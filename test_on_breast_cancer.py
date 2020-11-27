@@ -123,9 +123,9 @@ y = y.astype(dtype, copy=True)
 # Running the algorithm
 #===========================================# 
 
-r = [3, 1]
+r = [3, 2, 1]
 numobs = len(y)
-k = [n_clusters]
+k = [n_clusters, 2]
 
 seed = 1
 init_seed = 2
@@ -140,9 +140,14 @@ m, pred = misc(labels_oh, prince_init['classes'], True)
 print(m)
 print(confusion_matrix(labels_oh, pred))
 
+'''
+init = prince_init
+y = y_np
+seed = None
+'''
 
 out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it,\
-            eps, maxstep, seed, perform_selec = True)
+            eps, maxstep, seed, perform_selec = False)
 m, pred = misc(labels_oh, out['classes'], True) 
 print(m)
 print(confusion_matrix(labels_oh, pred))
@@ -263,7 +268,7 @@ for i in range(nb_trials):
 ddgmm_res.mean()
 ddgmm_res.std()
 
-ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded.csv')
+ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded_best_sil.csv')
 
 
 #=======================================================================
@@ -467,6 +472,5 @@ dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['micro'] 
 dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['macro'] == maxs['macro']].std()
 dbs_res.set_index(['data','leaf_size', 'eps', 'min_samples'])[mean_res['silhouette'] == maxs['silhouette']].std()
 
-
-
 dbs_res.to_csv(res_folder + '/dbs_res.csv')
+

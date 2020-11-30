@@ -219,12 +219,13 @@ for i in range(nb_trials):
         ddgmm_res = ddgmm_res.append({'it_id': i + 1, 'micro': np.nan, 'macro': np.nan, \
                                     'silhouette': np.nan}, ignore_index=True)
 
-
+    ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded_best_sil_identif.csv')
 
 ddgmm_res.mean()
 ddgmm_res.std()
 
-ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded_best_sil.csv')
+ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded_best_sil_identif.csv')
+
 
 
 #=======================================================================

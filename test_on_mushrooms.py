@@ -28,8 +28,6 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import silhouette_score
 
 
-
-
 ###############################################################################################
 ##############        Clustering on the Mushrooms dataset (UCI)          ######################
 ###############################################################################################
@@ -190,6 +188,9 @@ mca_res.groupby('r').std()
 
 mca_res.to_csv(res_folder + '/mca_res.csv')
 
+#==================================================
+# DDGMM First fing the best architecture
+#==================================================
 
 # DDGMM. Thresholds use: 0.25 and 0.10
 # r = 5, 1
@@ -198,12 +199,11 @@ r = np.array([5, 4, 3])
 numobs = len(y)
 k = [4, n_clusters]
 eps = 1E-05
-it = 1
+it = 3
 maxstep = 100
 seed = None
 
-
-# First fing the best architecture 
+ 
 prince_init = dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, seed = None)
 out = DDGMM(y_np, n_clusters, r, k, prince_init, var_distrib, nj, it, eps, maxstep, seed = None)
 
@@ -236,11 +236,11 @@ for i in range(nb_trials):
         ddgmm_res = ddgmm_res.append({'it_id': i + 1, 'micro': np.nan, 'macro': np.nan, \
                                     'silhouette': np.nan}, ignore_index=True)
 
-    #print(sil)
-    #print(micro)
-    #print(macro)
-    ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded_msi.csv')
+    print(sil)
+    print(micro)
+    print(macro)
     print(ddgmm_res)
+    ddgmm_res.to_csv(res_folder + '/ddgmm_res_k2D_categ_encoded_best_sil_identif.csv')
 
 
 ddgmm_res.mean()

@@ -123,10 +123,12 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         sigma_s = ensure_psd(sigma_s)
         z_s, zc_s = draw_z_s(mu_s, sigma_s, eta, M)
          
+        '''
         print('mu_s',  np.abs(mu_s[0]).mean())
         print('sigma_s',  np.abs(sigma_s[0]).mean())
         print('z_s0',  np.abs(z_s[0]).mean())
         print('z_s1',  np.abs(z_s[1]).mean(0)[:,0])
+        '''
         
         #========================================================================
         # Draw from f(z^{l+1} | z^{l}, s, Theta) for l >= 1
@@ -179,10 +181,12 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         Ez_ys, E_z1z2T_ys, E_z2z2T_ys, EeeT_ys = \
             E_step_DGMM(zl1_ys, H, z_s, zc_s, z2_z1s, pz_ys, pz2_z1s, S)
 
+        '''
         print('E(z1 | y, s) =', np.abs(Ez_ys[0]).mean())
         print('E(z1z2 | y, s) =',  np.abs(E_z1z2T_ys[0]).mean())
         print('E(z2z2 | y, s) =',  np.abs(E_z2z2T_ys[0]).mean())
-        print('E(eeT | y, s) =',  np.abs(EeeT_ys[0]).mean())   
+        print('E(eeT | y, s) =',  np.abs(EeeT_ys[0]).mean())  
+        '''
         
         ###########################################################################
         ############################ M step #######################################
@@ -247,6 +251,7 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         except ValueError:
             new_sil = -1
             
+        print('Silhouette score:', new_sil)
         if best_sil < new_sil:
             z = (ps_y[..., n_axis] * Ez_ys[clustering_layer]).sum(1)
             best_sil = deepcopy(new_sil)

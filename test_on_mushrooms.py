@@ -193,8 +193,8 @@ mca_res.to_csv(res_folder + '/mca_res.csv')
 #==================================================
 
 # DDGMM. Thresholds use: 0.25 and 0.10
-# r = 5, 1
-# k = 2, 1
+# r = [5, 1]
+# k = [2]
 r = np.array([5, 4, 3])
 numobs = len(y)
 k = [4, n_clusters]
@@ -240,7 +240,7 @@ for i in range(nb_trials):
     print(micro)
     print(macro)
     print(ddgmm_res)
-    ddgmm_res.to_csv(res_folder + '/ddgmm_res_k2D_categ_encoded_best_sil_identif.csv')
+    ddgmm_res.to_csv(res_folder + '/ddgmm_res_categ_encoded_best_sil_identif2.csv')
 
 
 ddgmm_res.mean()

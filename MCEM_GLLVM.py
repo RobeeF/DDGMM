@@ -60,10 +60,6 @@ def draw_zl1_ys(z_s, py_zl1, M):
 # E Step functions
 #=============================================================================
 
-'''
-zl1_s = z_s[0]
-'''
-
 def fy_zl1(lambda_bin, y_bin, nj_bin, lambda_ord, y_ord, nj_ord, lambda_categ,\
            y_categ, nj_categ, zl1_s):
     ''' Compute log p(y | z1) = sum_{s= 1}^S[0] p(y, s| z1) as in Cagnone and 
@@ -275,10 +271,6 @@ def ord_params_GLLVM(y_ord, nj_ord, lambda_ord_old, ps_y, pzl1_ys, zl1_s, AT,\
     
     return new_lambda_ord
         
-'''
-lambda_categ_old = deepcopy(lambda_categ)
-zl1_s = z_s[0]
-'''
 
 def categ_params_GLLVM(y_categ, nj_categ, lambda_categ_old, ps_y, pzl1_ys, zl1_s, AT,\
                      tol = 1E-5, maxstep = 100):

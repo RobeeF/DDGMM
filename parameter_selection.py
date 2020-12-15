@@ -10,21 +10,18 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 # Dirty local hard copy of the Github bevel package
 from bevel.linear_ordinal_regression import  OrderedLogit 
-import warnings 
-
-
-warnings.simplefilter('default')
 
 import autograd.numpy as np
 
 def rl1_selection(y_bin, y_ord, y_categ, zl1_ys, w_s):
-    ''' 
-        <Add arguments description>
-        Hyperparameters:
-        PROP_ZERO_THRESHOLD : The limit proportion of time a coefficient has 
-        been found to be zero before this dimension is deleted
-        PVALUE_THRESHOLD: The p-value threshold to zero a coefficient in ordinal
-        logistic regression 
+    ''' Selects the number of factors on the first latent discrete layer 
+    y_bin (n x p_bin ndarray): The binary and count data matrix
+    y_ord (n x p_ord ndarray): The ordinal data matrix
+    y_categ (n x p_categ ndarray): The categorical data matrix
+    zl1_ys (k_1D x r_1D ndarray): The first layer latent variables
+    w_s (list): The path probabilities starting from the first layer
+    ------------------------------------------------------------------
+    return (list of int): The dimensions to keep for the GLLVM layer
     '''
     
     M0 = zl1_ys.shape[0]
@@ -102,7 +99,13 @@ def rl1_selection(y_bin, y_ord, y_categ, zl1_ys, w_s):
 
 
 def other_r_selection(rl1_select, z2_z1s):
-
+    ''' Chose the meaningful dimensions from the second layer to the end of the network
+    rl1_select (list): The dimension kept over the first layer 
+    z2_z1s (list of ndarrays): z^{(l + 1)}| z^{(l)}, s
+    --------------------------------------------------------------------------
+    return (list of int): The dimensions to keep from the second layer of the network
+    '''
+    
     S = [zz.shape[2] for zz in z2_z1s] + [1]    
     CORR_THRESHOLD = 0.20
     
@@ -150,14 +153,33 @@ def other_r_selection(rl1_select, z2_z1s):
 
 
 def r_select(y_bin, y_ord, y_categ, zl1_ys, z2_z1s, w_s):
-    ''' Automatic choice of dimension of each layer components '''
-
+    ''' Automatic choice of dimension of all layer components 
+    y_bin (numobs x nb_bin nd-array): The binary/count data
+    y_ord (numobs x nb_ord nd-array): The ordinal data
+    y_categ (numobs x nb_categ nd-array): The categorical data
+    
+    yc (numobs x nb_categ nd-array): The continuous data
+    
+    zl1_ys (ndarray): The latent variable of the first layer
+    z2_z1s (list of ndarray): z^{l+1} | z^{l}, s, Theta for all (l,s)   
+    w_s (list): The path probabilities for all s in [1,S]
+    --------------------------------------------------------------------------
+    returns (dict): The dimensions kept for all the layers of the network
+    '''
+    
     rl1_select = rl1_selection(y_bin, y_ord, y_categ, zl1_ys, w_s)
     other_r_select =  other_r_selection(rl1_select, z2_z1s)
     return [rl1_select] + other_r_select
 
 def k_select(w_s, k, new_L, clustering_layer):
-    ''' Automatic choice of the number of components by layer '''
+    ''' Automatic choice of the number of components by layer 
+    w_s (list): The path probabilities for all s in [1,S]
+    k (dict): The number of component on each layer
+    new_L (int): The selected total number of layers.
+    clustering_layer (int): The index of the clustering layer
+    --------------------------------------------------------------------------
+    returns (dict): The components kept for all the layers of the network
+    '''
     
     L = len(k)
     n_clusters = k[clustering_layer]

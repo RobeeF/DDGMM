@@ -181,13 +181,7 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         Ez_ys, E_z1z2T_ys, E_z2z2T_ys, EeeT_ys = \
             E_step_DGMM(zl1_ys, H, z_s, zc_s, z2_z1s, pz_ys, pz2_z1s, S)
 
-        '''
-        print('E(z1 | y, s) =', np.abs(Ez_ys[0]).mean())
-        print('E(z1z2 | y, s) =',  np.abs(E_z1z2T_ys[0]).mean())
-        print('E(z2z2 | y, s) =',  np.abs(E_z2z2T_ys[0]).mean())
-        print('E(eeT | y, s) =',  np.abs(EeeT_ys[0]).mean())  
-        '''
-        
+
         ###########################################################################
         ############################ M step #######################################
         ###########################################################################
@@ -210,12 +204,6 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
         
         del(Ez)        
         
-        '''
-        print(eta[-1].mean())
-        print(H[-1].mean())
-        print(psi[-1].mean())
-        '''
-
         #=======================================================
         # Compute GLLVM Parameters
         #=======================================================
@@ -257,24 +245,14 @@ def DDGMM(y, n_clusters, r, k, init, var_distrib, nj, it = 50, \
             best_sil = deepcopy(new_sil)
             classes = deepcopy(temp_class)
 
-
-
+            fig = plt.figure(figsize=(8,8))
+            plt.scatter(z[:, 0], z[:, 1])
+            plt.show()
+            
         # Refresh the classes only if they provide a better explanation of the data
         if best_lik < new_lik:
             best_lik = deepcopy(prev_lik)
             
-            #idx_to_sum = tuple(set(range(1, L + 1)) - set([clustering_layer + 1]))
-            #psl_y = ps_y.reshape(numobs, *k, order = 'C').sum(idx_to_sum) 
-
-            #classes = np.argmax(psl_y, axis = 1) 
-            
-            #z = (ps_y[..., n_axis] * Ez_ys[clustering_layer]).sum(1)
-            
-            '''
-            fig = plt.figure(figsize=(8,8))
-            plt.scatter(z[:, 0], z[:, 1])
-            plt.show()
-            '''
         
         if prev_lik < new_lik:
             patience = 0

@@ -32,7 +32,14 @@ from autograd.numpy import newaxis as n_axis
 ####################################################################################
 
 def add_missing_paths(k, init_paths, init_nb_paths):
-    ''' Add the paths that have been given zeros probabily during init '''
+    ''' Add the paths that have been given zeros probabily during init 
+    k (dict of list): The number of components on each layer of each head and tail
+    init_paths (ndarray): The already existing non-zero probability paths
+    init_nb_paths (list of Bool): takes the value 1 if the path existed 0 otherwise
+    ---------------------------------------------------------------------------------
+    returns (tuple of size 2): The completed lists of paths (ndarray) and the total 
+                                number of paths (1d array)
+    '''
     
     L = len(k)
     all_possible_paths = list(product(*[np.arange(k[l]) for l in range(L)]))
@@ -100,9 +107,9 @@ def dim_reduce_init(y, n_clusters, k, r, nj, var_distrib, use_famd = False, seed
     nj (p 1darray): For binary/count data: The maximum values that the variable can take. 
                     For ordinal data: the number of different existing categories for each variable
     var_distrib (p 1darray): An array containing the types of the variables in y 
-    dim_red_method (str): Choices are 'prince' for MCA, 'umap' of 'tsne'
+    use_famd (Bool): Whether to the famd method (True) or not (False), to initiate the 
+                    first continuous latent variable. Otherwise MCA is used.
     seed (None): The random state seed to use for the dimension reduction
-    M (int): The number of MC points to compute     
     ---------------------------------------------------------------------------------------
     returns (dict): All initialisation parameters
     '''

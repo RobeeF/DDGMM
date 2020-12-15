@@ -85,14 +85,12 @@ for col_idx, colname in enumerate(y.columns):
     if var_distrib[col_idx] == 'bernoulli': 
         y[colname] = le.fit_transform(y[colname])
 
-#######################################################
 # Test to encode categorical variables
 le = LabelEncoder()
 for col_idx, colname in enumerate(y.columns):
     if var_distrib[col_idx] == 'categorical': 
         y[colname] = le.fit_transform(y[colname])
 
-#################################################
     
 enc = OneHotEncoder(sparse = False, drop = 'first')
 labels_oh = enc.fit_transform(np.array(labels).reshape(-1,1)).flatten()

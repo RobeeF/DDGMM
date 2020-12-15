@@ -16,10 +16,14 @@ from autograd.numpy.linalg import cholesky, pinv, eigh
 def compute_z_moments(w_s, eta_old, H_old, psi_old):
     ''' Compute the first moment and the variance of the latent variable 
     w_s (list of length s1): The path probabilities for all s in S1
-    mu_s (list of nd-arrays): The means of the Gaussians starting at each layer
-    sigma_s (list of nd-arrays): The covariance matrices of the Gaussians starting at each layer
+    eta_old (list of nb_layers elements of shape (K_l x r_{l-1}, 1)): mu  
+                        estimators of the previous iteration for each layer
+    H_old (list of nb_layers elements of shape (K_l x r_l-1, r_l)): Lambda 
+                        estimators of the previous iteration for each layer
+    psi_old (list of nb_layers elements of shape (K_l x r_l-1, r_l-1)): Psi 
+                        estimators of the previous iteration for each layer                        
     -------------------------------------------------------------------------
-    returns (tuple of length 2): E(z^{(1)}) and Var(z^{(1)})  
+    returns (tuple of length 2): E(z^{(l)}) and Var(z^{(l)}) for all l
     '''
     
     k = [eta.shape[0] for eta in eta_old]
@@ -57,15 +61,15 @@ def identifiable_estim_DGMM(eta_old, H_old, psi_old, Ez, AT):
                         estimators of the previous iteration for each layer
     H_old (list of nb_layers elements of shape (K_l x r_l-1, r_l)): Lambda 
                         estimators of the previous iteration for each layer
-    psi (list of nb_layers elements of shape (K_l x r_l-1, r_l-1)): Psi 
+    psi_old (list of nb_layers elements of shape (K_l x r_l-1, r_l-1)): Psi 
                         estimators of the previous iteration for each layer
-    Ez1 ((1, k1, 1) ndarray): E(z^{(1)})
-    AT ((1, k1, k1) ndarray): Var(z^{(1)})^{-1/2 T}
+    Ez1 (list of ndarrays): E(z^{(l)}) for all l
+    AT (list of ndarrays): Var(z^{(1)})^{-1/2 T} for all l
     -------------------------------------------------------------------------
-    returns (tuple of length 3): "identifiable" esimators of eta, Lambda and Psi
+    returns (tuple of length 3): "identifiable" estimators of eta, Lambda and 
+                                Psi (1st condition)
     ''' 
-
-
+    
     L = len(eta_old)
     
     eta_new = [[] for l in range(L)]
@@ -91,9 +95,9 @@ def diagonal_cond(H_old, psi_old):
     psi_old (list of ndarrays): The previous iteration values of Psi estimators
                     (list of nb_layers elements of shape (K_l x r_l-1, r_l-1))
     ------------------------------------------------------------------------
-    returns (list of nb_layers elements of shape (K_l x r_l-1, r_l)): The 
-                                                "identifiable" H estimator
+    returns (list of ndarrays): An "identifiable" H estimator (2nd condition)                                          
     '''
+    
     L = len(H_old)
     
     H = []
